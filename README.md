@@ -18,3 +18,21 @@ Or pass your OpenAI API key as a flag like so:
 desk-talk --ptt-key scroll-lock --api-key [YOUR_API_KEY]
 ```
 
+## Other Usage
+
+### Special Keys
+
+For 
+
+To find the name of a key by pressing it, run:
+
+```
+desk-talk show-key-presses
+```
+
+If your key shows as `Unknown(number)`, pass `number` to the `--special-ptt-key` flag like so:
+
+```
+desk-talk --special-ptt-key 125
+```
+
