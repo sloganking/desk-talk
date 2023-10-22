@@ -28,8 +28,6 @@ desk-talk --ptt-key scroll-lock --api-key [YOUR_API_KEY]
 
 ### Special Keys
 
-For 
-
 To find the name of a key by pressing it, run:
 
 ```
