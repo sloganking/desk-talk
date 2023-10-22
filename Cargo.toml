@@ -1,6 +1,6 @@
 [package]
 name = "desk-talk"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "A software that records when you press a button down, and types what you said when you release it"
 license = "MIT"
