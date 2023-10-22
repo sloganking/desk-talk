@@ -2,6 +2,8 @@
  
 Transcription for your desktop.
 
+A software that records when you press a button down, and types what you said when you release it.
+
 ## Quickstart
 
 Assign your OpenAI API key to the `OPENAI_API_KEY` environment variable and run:
