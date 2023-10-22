@@ -18,6 +18,8 @@ Or pass your OpenAI API key as a flag like so:
 desk-talk --ptt-key scroll-lock --api-key [YOUR_API_KEY]
 ```
 
+`desk-talk` will now record every time you hold down the ptt-key, and type what you spoke every time you release it.
+
 ## Other Usage
 
 ### Special Keys
