@@ -6,3 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.75"
+async-openai = "0.14.3"
+clap = { version = "4.4.6", features = ["derive"] }
+colored = "2.0.4"
+cpal = "0.15.2"
+dotenvy = "0.15.7"
+enigo = "0.1.3"
+futures = "0.3.28"
+hound = "3.5.1"
+lazy_static = "1.4.0"
+no-panic = "0.1.26"
+rdev = "0.5.3"
+tempfile = "3.8.0"
+tokio = { version = "1.29.0", features = ["macros", "rt-multi-thread"] }
+tts_rust = "0.3.5"
