@@ -36,3 +36,20 @@ If your key shows as `Unknown(number)`, pass `number` to the `--special-ptt-key`
 desk-talk --special-ptt-key 125
 ```
 
+### Non-default recording device
+
+To use a microphone other than the system default, run 
+
+
+```
+desk-talk list-devices    
+```
+
+to get a list of system microphone names. And pass the desired microphone name to ``--device`` like so:
+
+
+```
+desk-talk --ptt-key scroll-lock --device "Microphone (3- USB Audio Device)"
+```
+
+
