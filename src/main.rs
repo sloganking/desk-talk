@@ -347,11 +347,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let client = Client::new();
             let runtime =
                 tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-
-            let settings = EnigoSettings {
-                ..Default::default()
-            };
-            let mut enigo = Enigo::new(&settings).context("Failed to create enigo")?;
+            let mut enigo =
+                Enigo::new(&EnigoSettings::default()).context("Failed to create enigo")?;
 
             let tmp_dir = tempdir()?;
             // println!("{:?}", tmp_dir.path());
