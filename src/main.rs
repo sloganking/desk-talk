@@ -407,15 +407,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                 };
 
-                                if let Some(last_char) = transcription.chars().last() {
-                                    if last_char != '.'
-                                        && last_char != '?'
-                                        && last_char != '!'
-                                        && last_char != ','
-                                    {
-                                        transcription.push('.');
-                                    }
-                                }
+                                // if let Some(last_char) = transcription.chars().last() {
+                                //     if last_char != '.'
+                                //         && last_char != '?'
+                                //         && last_char != '!'
+                                //         && last_char != ','
+                                //     {
+                                //         transcription.push('.');
+                                //     }
+                                // }
                                 transcription.push(' ');
 
                                 enigo.key_sequence(&transcription);
