@@ -67,6 +67,7 @@ pub mod trans {
         let request = CreateTranscriptionRequestArgs::default()
             .file(input_mp3)
             .model("whisper-1")
+            .prompt("And now, a transcription from random language(s) that concludes with perfect punctuation: ")
             .build()
             .context("Failed to build transcription request.")?;
 
