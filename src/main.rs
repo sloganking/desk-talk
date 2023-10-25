@@ -409,7 +409,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                                 if let Some(last_char) = transcription.chars().last() {
                                     if ['.', '?', '!', ','].contains(&last_char) {
-                                        println!("adding space to end of transcription");
                                         transcription.push(' ');
                                     }
                                 }
