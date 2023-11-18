@@ -7,12 +7,13 @@ use tempfile::tempdir;
 mod transcribe;
 use transcribe::trans;
 mod record;
+use async_std::future;
 use clap::{Parser, Subcommand};
+use cpal::traits::{DeviceTrait, HostTrait};
 use rdev::{listen, Event};
 use record::rec;
 use std::error::Error;
-
-use cpal::traits::{DeviceTrait, HostTrait};
+use std::time::Duration;
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -396,9 +397,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                             // Whisper API can't handle less than 0.1 seconds of audio.
                             // So we'll only transcribe if the recording is longer than 0.2 seconds.
                             if elapsed.as_secs_f32() > 0.2 {
-                                let mut transcription = match runtime
-                                    .block_on(trans::transcribe(&client, &voice_tmp_path))
-                                {
+                                let transcription_result = match runtime.block_on(future::timeout(
+                                    Duration::from_secs(10),
+                                    trans::transcribe(&client, &voice_tmp_path),
+                                )) {
+                                    Ok(transcription_result) => transcription_result,
+                                    Err(err) => {
+                                        println!("Error: Failed to transcribe audio due to timeout: {:?}", err);
+                                        return;
+                                    }
+                                };
+
+                                let mut transcription = match transcription_result {
                                     Ok(transcription) => transcription,
                                     Err(err) => {
                                         println!("Error: Failed to transcribe audio: {:?}", err);
