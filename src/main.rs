@@ -1,7 +1,7 @@
 use anyhow::Context;
 use async_openai::Client;
 use dotenvy::dotenv;
-use enigo::{Enigo, EnigoSettings, KeyboardControllable};
+use enigo::{Enigo, KeyboardControllable};
 use std::env;
 use tempfile::tempdir;
 mod transcribe;
@@ -354,9 +354,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let runtime = tokio::runtime::Runtime::new()
                     .context("Failed to create tokio runtime")
                     .unwrap();
-                let mut enigo = Enigo::new(&EnigoSettings::default())
-                    .context("Failed to create enigo")
-                    .unwrap();
+                let mut enigo = Enigo::new();
 
                 let tmp_dir = tempdir().unwrap();
                 // println!("{:?}", tmp_dir.path());

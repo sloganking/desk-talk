@@ -15,8 +15,7 @@ async-std = "1.12.0"
 clap = { version = "4.4.6", features = ["derive"] }
 cpal = "0.15.2"
 dotenvy = "0.15.7"
-# enigo = "0.1.3"
-enigo = { git = "https://github.com/enigo-rs/enigo.git", rev = "96d5fd2b461fbe61e44473437356b2e2905dbc50" }
+enigo = "0.1.3"
 flume = "0.11.0"
 hound = "3.5.1"
 rdev = "0.5.3"
