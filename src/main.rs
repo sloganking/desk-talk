@@ -5,6 +5,7 @@ use enigo::{Enigo, KeyboardControllable};
 use std::env;
 use tempfile::tempdir;
 mod transcribe;
+use std::thread;
 use transcribe::trans;
 mod record;
 use async_std::future;
@@ -344,97 +345,126 @@ fn main() -> Result<(), Box<dyn Error>> {
                 return Ok(());
             }
 
-            let mut recorder = rec::Recorder::new();
-            let client = Client::new();
-            let runtime =
-                tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-            let mut enigo = Enigo::new();
+            let (tx, rx): (flume::Sender<Event>, flume::Receiver<Event>) = flume::unbounded();
 
-            let tmp_dir = tempdir()?;
-            // println!("{:?}", tmp_dir.path());
-            let voice_tmp_path = tmp_dir.path().join("voice_tmp.wav");
+            // create key handler thread
+            thread::spawn(move || {
+                let mut recorder = rec::Recorder::new();
+                let client = Client::new();
+                let runtime = tokio::runtime::Runtime::new()
+                    .context("Failed to create tokio runtime")
+                    .unwrap();
+                let mut enigo = Enigo::new();
 
-            let mut recording_start = std::time::SystemTime::now();
-            let mut key_pressed = false;
+                let tmp_dir = tempdir().unwrap();
+                // println!("{:?}", tmp_dir.path());
+                let voice_tmp_path = tmp_dir.path().join("voice_tmp.wav");
 
-            let callback = move |event: Event| {
+                let mut recording_start = std::time::SystemTime::now();
+                let mut key_pressed = false;
                 let key_to_check = ptt_key;
-                match event.event_type {
-                    rdev::EventType::KeyPress(key) => {
-                        if key == key_to_check && !key_pressed {
-                            key_pressed = true;
-                            // handle key press
-                            recording_start = std::time::SystemTime::now();
-                            match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
-                                Ok(_) => (),
-                                Err(err) => println!("Error: Failed to start recording: {:?}", err),
+
+                for event in rx.iter() {
+                    // println!("Received: {:?}", event);
+                    match event.event_type {
+                        rdev::EventType::KeyPress(key) => {
+                            if key == key_to_check && !key_pressed {
+                                key_pressed = true;
+                                // handle key press
+                                recording_start = std::time::SystemTime::now();
+                                match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
+                                    Ok(_) => (),
+                                    Err(err) => {
+                                        println!("Error: Failed to start recording: {:?}", err)
+                                    }
+                                }
                             }
                         }
-                    }
-                    rdev::EventType::KeyRelease(key) => {
-                        if key == key_to_check && key_pressed {
-                            key_pressed = false;
-                            // handle key release
+                        rdev::EventType::KeyRelease(key) => {
+                            if key == key_to_check && key_pressed {
+                                key_pressed = false;
+                                // handle key release
 
-                            // get elapsed time since recording started
-                            let elapsed = match recording_start.elapsed() {
-                                Ok(elapsed) => elapsed,
-                                Err(err) => {
-                                    println!(
-                            "Error: Failed to get elapsed recording time. Skipping transcription: \n\n{}",err
-                        );
-                                    return;
-                                }
-                            };
-                            match recorder.stop_recording() {
-                                Ok(_) => (),
-                                Err(err) => {
-                                    println!("Error: Failed to stop recording: {:?}", err);
-                                    return;
-                                }
-                            }
-
-                            // Whisper API can't handle less than 0.1 seconds of audio.
-                            // So we'll only transcribe if the recording is longer than 0.2 seconds.
-                            if elapsed.as_secs_f32() > 0.2 {
-                                let transcription_result = match runtime.block_on(future::timeout(
-                                    Duration::from_secs(10),
-                                    trans::transcribe(&client, &voice_tmp_path),
-                                )) {
-                                    Ok(transcription_result) => transcription_result,
+                                // get elapsed time since recording started
+                                let elapsed = match recording_start.elapsed() {
+                                    Ok(elapsed) => elapsed,
                                     Err(err) => {
-                                        println!("Error: Failed to transcribe audio due to timeout: {:?}", err);
-                                        return;
+                                        println!("Error: Failed to get elapsed recording time. Skipping transcription: \n\n{}",err);
+                                        continue;
                                     }
                                 };
-
-                                let mut transcription = match transcription_result {
-                                    Ok(transcription) => transcription,
+                                match recorder.stop_recording() {
+                                    Ok(_) => (),
                                     Err(err) => {
-                                        println!("Error: Failed to transcribe audio: {:?}", err);
-                                        return;
-                                    }
-                                };
-
-                                if let Some(last_char) = transcription.chars().last() {
-                                    if ['.', '?', '!', ','].contains(&last_char) {
-                                        transcription.push(' ');
+                                        println!("Error: Failed to stop recording: {:?}", err);
+                                        continue;
                                     }
                                 }
 
-                                enigo.key_sequence(&transcription);
-                            } else {
-                                println!("Recording too short");
+                                // future::timeout(
+                                //     Duration::from_secs(10),
+                                //     trans::transcribe(&client, &voice_tmp_path),
+                                // )
+                                // .await;
+
+                                // Whisper API can't handle less than 0.1 seconds of audio.
+                                // So we'll only transcribe if the recording is longer than 0.2 seconds.
+                                if elapsed.as_secs_f32() > 0.2 {
+                                    let transcription_result = match runtime.block_on(
+                                        future::timeout(
+                                            Duration::from_secs(10),
+                                            trans::transcribe(&client, &voice_tmp_path),
+                                        ),
+                                    ) {
+                                        Ok(transcription_result) => transcription_result,
+                                        Err(err) => {
+                                            println!("Error: Failed to transcribe audio due to timeout: {:?}", err);
+                                            continue;
+                                        }
+                                    };
+
+                                    let mut transcription = match transcription_result {
+                                        Ok(transcription) => transcription,
+                                        Err(err) => {
+                                            println!(
+                                                "Error: Failed to transcribe audio: {:?}",
+                                                err
+                                            );
+                                            continue;
+                                        }
+                                    };
+
+                                    if let Some(last_char) = transcription.chars().last() {
+                                        if ['.', '?', '!', ','].contains(&last_char) {
+                                            transcription.push(' ');
+                                        }
+                                    }
+
+                                    if transcription.is_empty() {
+                                        println!("No transcription");
+                                    }
+
+                                    enigo.key_sequence(&transcription);
+                                } else {
+                                    println!("Recording too short");
+                                }
                             }
                         }
+                        _ => (),
                     }
-                    _ => (),
                 }
-            };
+            });
 
-            // This will block.
-            if let Err(error) = listen(callback) {
-                println!("Error: {:?}", error)
+            // Have this main thread recieve events and send them to the key handler thread
+            {
+                let callback = move |event: Event| {
+                    tx.send(event).unwrap();
+                };
+
+                // This will block.
+                if let Err(error) = listen(callback) {
+                    println!("Error: {:?}", error)
+                }
             }
 
             Ok(())
