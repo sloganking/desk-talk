@@ -442,6 +442,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     }
 
+                                    if transcription.is_empty() {
+                                        println!("No transcription");
+                                    }
+
                                     enigo.key_sequence(&transcription);
                                 } else {
                                     println!("Recording too short");
