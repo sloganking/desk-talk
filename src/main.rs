@@ -316,6 +316,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                         };
                         println!("{:?}", device_name);
                     }
+
+                    // devices
+                    //     .filter_map(|device| device.name().ok())
+                    //     .for_each(|device_name| println!("{:?}", device_name));
                 }
             }
 
