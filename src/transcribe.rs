@@ -56,13 +56,15 @@ pub mod trans {
         // Make input file an mp3 if it is not
         // We do this to get around the api file size limit:
         // Error: ApiError(ApiError { message: "Maximum content size limit (26214400) exceeded (26228340 bytes read)", type: "server_error", param: None, code: None })
-        let input_mp3 = if input.extension().unwrap_or_default() != "mp3" {
-            // println!("{:?}", tmp_dir.path());
-            move_audio_to_mp3(input, &tmp_mp3_path).context("Failed to convert audio to mp3.")?
-        } else {
-            // println!("{:?}", input);
-            PathBuf::from(input)
-        };
+        // let input_mp3 = if input.extension().unwrap_or_default() != "mp3" {
+        //     // println!("{:?}", tmp_dir.path());
+        //     move_audio_to_mp3(input, &tmp_mp3_path).context("Failed to convert audio to mp3.")?
+        // } else {
+        //     // println!("{:?}", input);
+        //     PathBuf::from(input)
+        // };
+
+        let input_mp3 = input;
 
         let request = CreateTranscriptionRequestArgs::default()
             .file(input_mp3)
