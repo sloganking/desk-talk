@@ -4,8 +4,8 @@ Transcription for your desktop.
 
 A software that records what you say when you press a button down, and types what you said when you release it.
 
-
-⚠️Video Has Sound⚠️
+> [!IMPORTANT]
+> ⚠️ This video contains sound and is intended to be listened to with audio on. ⚠️
 
 https://github.com/sloganking/desk-talk/assets/16965931/e5da605b-3a9d-4394-b4ec-a3de65605a65
 
