@@ -5,17 +5,20 @@ use enigo::{Enigo, KeyboardControllable};
 use std::env;
 use tempfile::tempdir;
 mod transcribe;
-use std::thread;
+use std::thread::{self, sleep};
 use transcribe::trans;
 mod record;
 use async_std::future;
 use clap::{Parser, Subcommand};
+use clipboard::ClipboardContext;
+use clipboard::ClipboardProvider;
 use cpal::traits::{DeviceTrait, HostTrait};
 use rdev::{listen, Event};
 use record::rec;
 use std::error::Error;
 use std::time::Duration;
 mod easy_rdev_key;
+use crate::easy_rdev_key::PTTKey;
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -30,7 +33,7 @@ struct Opt {
 
     /// The push to talk key
     #[arg(short, long)]
-    ptt_key: Option<easy_rdev_key::PTTKey>,
+    ptt_key: Option<PTTKey>,
 
     /// The push to talk key.
     /// Use this if you want to use a key that is not supported by the PTTKey enum.
@@ -53,6 +56,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
     let _ = dotenv();
 
+    let mut clipboard: ClipboardContext = ClipboardProvider::new().unwrap();
+
     match opt.subcommands {
         Some(subcommand) => {
             match subcommand {
@@ -73,6 +78,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SubCommands::ListDevices => {
                     let host = cpal::default_host();
 
+                    let test = host.default_output_device().unwrap();
+
+                    println!("default output_device: {:?}", test.name());
                     // Set up the input device and stream with the default input config.
                     host.default_input_device();
                     let devices = host
@@ -131,7 +139,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let runtime = tokio::runtime::Runtime::new()
                     .context("Failed to create tokio runtime")
                     .unwrap();
-                let mut enigo = Enigo::new();
+                // let mut enigo = Enigo::new();
 
                 let tmp_dir = tempdir().unwrap();
                 // println!("{:?}", tmp_dir.path());
@@ -221,7 +229,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         println!("No transcription");
                                     }
 
-                                    enigo.key_sequence(&transcription);
+                                    // enigo.key_sequence(&transcription);
+                                    // paste from clipboard
+
+                                    // get the clipboard contents so we can restore it later
+                                    let clip_tmp_result = clipboard.get_contents();
+
+                                    // Set and paste Clipboard Contents
+                                    clipboard.set_contents(transcription);
+                                    Enigo.key_sequence_parse("{+CTRL}");
+                                    sleep(Duration::from_millis(100));
+                                    Enigo.key_sequence_parse("v");
+                                    sleep(Duration::from_millis(100));
+                                    Enigo.key_sequence_parse("{-CTRL}");
+                                    sleep(Duration::from_millis(100));
+
+                                    // restore the clipboard contents
+                                    if let Ok(clip_tmp) = clip_tmp_result {
+                                        if let Err(err) = clipboard.set_contents(clip_tmp) {
+                                            println!("Error restoring clipboard contents: {}", err);
+                                        }
+                                    }
                                 } else {
                                     println!("Recording too short");
                                 }
