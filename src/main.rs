@@ -236,18 +236,31 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     let clip_tmp_result = clipboard.get_contents();
 
                                     // Set and paste Clipboard Contents
-                                    clipboard.set_contents(transcription);
-                                    Enigo.key_sequence_parse("{+CTRL}");
-                                    sleep(Duration::from_millis(100));
-                                    Enigo.key_sequence_parse("v");
-                                    sleep(Duration::from_millis(100));
-                                    Enigo.key_sequence_parse("{-CTRL}");
-                                    sleep(Duration::from_millis(100));
+                                    match clipboard.set_contents(transcription) {
+                                        Ok(_) => {
+                                            Enigo.key_sequence_parse("{+CTRL}");
+                                            sleep(Duration::from_millis(100));
+                                            Enigo.key_sequence_parse("v");
+                                            sleep(Duration::from_millis(100));
+                                            Enigo.key_sequence_parse("{-CTRL}");
+                                            sleep(Duration::from_millis(100));
 
-                                    // restore the clipboard contents
-                                    if let Ok(clip_tmp) = clip_tmp_result {
-                                        if let Err(err) = clipboard.set_contents(clip_tmp) {
-                                            println!("Error restoring clipboard contents: {}", err);
+                                            // restore the clipboard contents
+                                            if let Ok(clip_tmp) = clip_tmp_result {
+                                                if let Err(err) = clipboard.set_contents(clip_tmp) {
+                                                    println!(
+                                                        "Error restoring clipboard contents: {}",
+                                                        err
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        Err(err) => {
+                                            println!(
+                                                "Error: Failed to set clipboard contents: {:?}",
+                                                err
+                                            );
+                                            continue;
                                         }
                                     }
                                 } else {
