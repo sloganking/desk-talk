@@ -217,6 +217,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     }
 
+                                    // Remove ellipses.
+                                    transcription = transcription.replace("...", "");
+
                                     if transcription.is_empty() {
                                         println!("No transcription");
                                     }
