@@ -39,6 +39,12 @@ struct Opt {
     #[arg(short, long)]
     cap_first: bool,
 
+    /// Ensures the transcription ends with a space character. This lets you transcribe repeatedly without typing a space character between transcriptions to separate the words.
+    ///
+    /// This is a flag and not default behavior because in some natural languages it doesn't make sense to put a space after the transcription.
+    #[arg(short, long)]
+    space: bool,
+
     /// The push to talk key.
     /// Use this if you want to use a key that is not supported by the PTTKey enum.
     #[arg(short, long, conflicts_with("ptt_key"))]
@@ -236,9 +242,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         capitalize_first_letter(&mut transcription);
                                     }
 
-                                    if let Some(last_char) = transcription.chars().last() {
-                                        if ['.', '?', '!', ','].contains(&last_char) {
-                                            transcription.push(' ');
+                                    if opt.space {
+                                        if let Some(last_char) = transcription.chars().last() {
+                                            if last_char != ' ' {
+                                                transcription.push(' ');
+                                            }
                                         }
                                     }
 
