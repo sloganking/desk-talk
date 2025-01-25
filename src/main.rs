@@ -52,6 +52,15 @@ pub enum SubCommands {
     ListDevices,
 }
 
+fn capitalize_first_letter(s: &mut String) {
+    let mut c = s.chars();
+    if let Some(f) = c.next() {
+        let uppercase: String = f.to_uppercase().collect();
+        let first_char_len = f.len_utf8();
+        s.replace_range(0..first_char_len, &uppercase);
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
     let _ = dotenv();
@@ -218,6 +227,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             continue;
                                         }
                                     };
+
+                                    // Capitalize first letter
+                                    capitalize_first_letter(&mut transcription);
 
                                     if let Some(last_char) = transcription.chars().last() {
                                         if ['.', '?', '!', ','].contains(&last_char) {
