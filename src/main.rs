@@ -238,23 +238,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
 
-                                    if opt.cap_first {
-                                        capitalize_first_letter(&mut transcription);
-                                    }
+                                    // Transctiption post processing
+                                    {
+                                        if opt.cap_first {
+                                            capitalize_first_letter(&mut transcription);
+                                        }
 
-                                    if opt.space {
-                                        if let Some(last_char) = transcription.chars().last() {
-                                            if last_char != ' ' {
-                                                transcription.push(' ');
+                                        if opt.space {
+                                            if let Some(last_char) = transcription.chars().last() {
+                                                if last_char != ' ' {
+                                                    transcription.push(' ');
+                                                }
                                             }
                                         }
-                                    }
 
-                                    // Remove ellipses.
-                                    transcription = transcription.replace("...", "");
+                                        // Remove ellipses.
+                                        transcription = transcription.replace("...", "");
+                                    }
 
                                     if transcription.is_empty() {
                                         println!("No transcription");
+                                        continue;
                                     }
 
                                     // enigo.key_sequence(&transcription);
