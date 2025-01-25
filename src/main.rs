@@ -35,6 +35,10 @@ struct Opt {
     #[arg(short, long)]
     ptt_key: Option<PTTKey>,
 
+    /// Ensures the first letter of the transcription is capitalized.
+    #[arg(short, long)]
+    cap_first: bool,
+
     /// The push to talk key.
     /// Use this if you want to use a key that is not supported by the PTTKey enum.
     #[arg(short, long, conflicts_with("ptt_key"))]
@@ -228,8 +232,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
 
-                                    // Capitalize first letter
-                                    capitalize_first_letter(&mut transcription);
+                                    if opt.cap_first {
+                                        capitalize_first_letter(&mut transcription);
+                                    }
 
                                     if let Some(last_char) = transcription.chars().last() {
                                         if ['.', '?', '!', ','].contains(&last_char) {
