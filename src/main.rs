@@ -45,6 +45,11 @@ struct Opt {
     #[arg(short, long)]
     space: bool,
 
+    /// Passing this flag will emulate the keyboard for typing the characters, instead of pressing Ctrl-V and pacing the text, which is the default behavior.
+    /// This may be needed to pass text to a terminal, which would not accept pasting or something else.
+    #[arg(short, long)]
+    type_chars: bool,
+
     /// The push to talk key.
     /// Use this if you want to use a key that is not supported by the PTTKey enum.
     #[arg(short, long, conflicts_with("ptt_key"))]
@@ -158,7 +163,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let runtime = tokio::runtime::Runtime::new()
                     .context("Failed to create tokio runtime")
                     .unwrap();
-                // let mut enigo = Enigo::new();
+                let mut enigo = Enigo::new();
 
                 let tmp_dir = tempdir().unwrap();
                 // println!("{:?}", tmp_dir.path());
@@ -261,38 +266,43 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         continue;
                                     }
 
-                                    // enigo.key_sequence(&transcription);
-                                    // paste from clipboard
+                                    if opt.type_chars {
+                                        enigo.key_sequence(&transcription);
+                                    } else {
+                                        // paste from clipboard
 
-                                    // get the clipboard contents so we can restore it later
-                                    let clip_tmp_result = clipboard.get_contents();
+                                        // get the clipboard contents so we can restore it later
+                                        let clip_tmp_result = clipboard.get_contents();
 
-                                    // Set and paste Clipboard Contents
-                                    match clipboard.set_contents(transcription) {
-                                        Ok(_) => {
-                                            Enigo.key_sequence_parse("{+CTRL}");
-                                            sleep(Duration::from_millis(100));
-                                            Enigo.key_sequence_parse("v");
-                                            sleep(Duration::from_millis(100));
-                                            Enigo.key_sequence_parse("{-CTRL}");
-                                            sleep(Duration::from_millis(100));
+                                        // Set and paste Clipboard Contents
+                                        match clipboard.set_contents(transcription) {
+                                            Ok(_) => {
+                                                Enigo.key_sequence_parse("{+CTRL}");
+                                                sleep(Duration::from_millis(100));
+                                                Enigo.key_sequence_parse("v");
+                                                sleep(Duration::from_millis(100));
+                                                Enigo.key_sequence_parse("{-CTRL}");
+                                                sleep(Duration::from_millis(100));
 
-                                            // restore the clipboard contents
-                                            if let Ok(clip_tmp) = clip_tmp_result {
-                                                if let Err(err) = clipboard.set_contents(clip_tmp) {
-                                                    println!(
+                                                // restore the clipboard contents
+                                                if let Ok(clip_tmp) = clip_tmp_result {
+                                                    if let Err(err) =
+                                                        clipboard.set_contents(clip_tmp)
+                                                    {
+                                                        println!(
                                                         "Error restoring clipboard contents: {}",
                                                         err
                                                     );
+                                                    }
                                                 }
                                             }
-                                        }
-                                        Err(err) => {
-                                            println!(
-                                                "Error: Failed to set clipboard contents: {:?}",
-                                                err
-                                            );
-                                            continue;
+                                            Err(err) => {
+                                                println!(
+                                                    "Error: Failed to set clipboard contents: {:?}",
+                                                    err
+                                                );
+                                                continue;
+                                            }
                                         }
                                     }
                                 } else {
