@@ -321,3 +321,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capitalize_first_letter_works() {
+        let mut s = String::from("hello");
+        capitalize_first_letter(&mut s);
+        assert_eq!(s, "Hello");
+    }
+}
