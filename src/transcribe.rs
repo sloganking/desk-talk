@@ -2,13 +2,13 @@ pub mod trans {
 
     use anyhow::{anyhow, bail, Context};
     use async_openai::{config::OpenAIConfig, types::CreateTranscriptionRequestArgs, Client};
+    use async_std::future;
+    use std::time::Duration;
     use std::{
         error::Error,
         path::{Path, PathBuf},
         process::Command,
     };
-    use async_std::{future, task};
-    use std::time::Duration;
     use tempfile::tempdir;
 
     /// Moves audio to mp3.
