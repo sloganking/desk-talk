@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(subcommand) => {
             match subcommand {
                 SubCommands::ShowKeyPresses => {
-                    println!("Press keys to see their codes. Press Ctrl+C to exit. Once you've figured out what key you want to use for push to talk, pass it to easy-tran using the --ptt-key argument. Or pass the number to the --special-ptt-key argument if the key is Unknown(number).");
+                    println!("Press keys to see their codes. Press Ctrl+C to exit. Once you've figured out what key you want to use for push to talk, pass it to desk-talk using the --ptt-key argument. Or pass the number to the --special-ptt-key argument if the key is Unknown(number).");
 
                     fn show_keys_callback(event: Event) {
                         if let rdev::EventType::KeyPress(key) = event.event_type {
