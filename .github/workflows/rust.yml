@@ -29,6 +29,8 @@ jobs:
           libxcb-render0-dev \
           libxcb-shape0-dev \
           libxcb-xfixes0-dev
+    - name: Check formatting
+      run: cargo fmt --all -- --check
     - name: Build
       run: cargo build --verbose
     - name: Run tests

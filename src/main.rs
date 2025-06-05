@@ -171,8 +171,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut recording_start = std::time::SystemTime::now();
                 let mut key_pressed = false;
                 let key_to_check = ptt_key;
-                let mut retry_last = false;
-                let mut retry_mode = false;
 
                 for event in rx.iter() {
                     // println!("Received: {:?}", event);
@@ -180,19 +178,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                         rdev::EventType::KeyPress(key) => {
                             if key == key_to_check && !key_pressed {
                                 key_pressed = true;
-                                if retry_last {
-                                    retry_mode = true;
-                                    println!("Retrying transcription of last audio");
-                                } else {
-                                    retry_mode = false;
-                                    recording_start = std::time::SystemTime::now();
-                                    match recorder
-                                        .start_recording(&voice_tmp_path, Some(&opt.device))
-                                    {
-                                        Ok(_) => (),
-                                        Err(err) => {
-                                            println!("Error: Failed to start recording: {:?}", err)
-                                        }
+                                // handle key press
+                                recording_start = std::time::SystemTime::now();
+                                match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
+                                    Ok(_) => (),
+                                    Err(err) => {
+                                        println!("Error: Failed to start recording: {:?}", err)
                                     }
                                 }
                             }
@@ -202,26 +193,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 key_pressed = false;
                                 // handle key release
 
-                                let elapsed = if retry_mode {
-                                    Duration::from_secs_f32(1.0)
-                                } else {
-                                    match recording_start.elapsed() {
-                                        Ok(elapsed) => elapsed,
-                                        Err(err) => {
-                                            println!("Error: Failed to get elapsed recording time. Skipping transcription: \n\n{}",err);
-                                            continue;
-                                        }
+                                // get elapsed time since recording started
+                                let elapsed = match recording_start.elapsed() {
+                                    Ok(elapsed) => elapsed,
+                                    Err(err) => {
+                                        println!("Error: Failed to get elapsed recording time. Skipping transcription: \n\n{}",err);
+                                        continue;
                                     }
                                 };
-
-                                if !retry_mode {
-                                    match recorder.stop_recording() {
-                                        Ok(_) => (),
-                                        Err(err) => {
-                                            println!("Error: Failed to stop recording: {:?}", err);
-                                            retry_mode = false;
-                                            continue;
-                                        }
+                                match recorder.stop_recording() {
+                                    Ok(_) => (),
+                                    Err(err) => {
+                                        println!("Error: Failed to stop recording: {:?}", err);
+                                        continue;
                                     }
                                 }
 
@@ -232,25 +216,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 // .await;
 
                                 // Whisper API can't handle less than 0.1 seconds of audio.
-                                // So we'll only transcribe if the recording is longer than 0.2 seconds
-                                // or we are retrying a previous recording.
-                                if retry_mode || elapsed.as_secs_f32() > 0.2 {
+                                // So we'll only transcribe if the recording is longer than 0.2 seconds.
+                                if elapsed.as_secs_f32() > 0.2 {
                                     let transcription_result = runtime.block_on(
                                         trans::transcribe_with_retry(&client, &voice_tmp_path, 3),
                                     );
 
                                     let mut transcription = match transcription_result {
-                                        Ok(transcription) => {
-                                            retry_last = false;
-                                            transcription
-                                        }
+                                        Ok(transcription) => transcription,
                                         Err(err) => {
                                             println!(
                                                 "Error: Failed to transcribe audio: {:?}",
                                                 err
                                             );
-                                            retry_last = true;
-                                            retry_mode = false;
                                             continue;
                                         }
                                     };
@@ -275,7 +253,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                                     if transcription.is_empty() {
                                         println!("No transcription");
-                                        retry_mode = false;
                                         continue;
                                     }
 
@@ -314,7 +291,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                                     "Error: Failed to set clipboard contents: {:?}",
                                                     err
                                                 );
-                                                retry_mode = false;
                                                 continue;
                                             }
                                         }
@@ -322,7 +298,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 } else {
                                     println!("Recording too short");
                                 }
-                                retry_mode = false;
                             }
                         }
                         _ => (),
