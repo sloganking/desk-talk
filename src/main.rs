@@ -44,7 +44,7 @@ struct Opt {
     #[arg(short, long)]
     space: bool,
 
-    /// Passing this flag will emulate the keyboard for typing the characters, instead of pressing Ctrl-V and pacing the text, which is the default behavior.
+    /// Passing this flag will emulate the keyboard for typing the characters, instead of pressing Ctrl-V and pasting the text, which is the default behavior.
     /// This may be needed to pass text to a terminal, which would not accept pasting or something else.
     #[arg(short, long)]
     type_chars: bool,
