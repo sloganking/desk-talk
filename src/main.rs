@@ -8,7 +8,6 @@ mod transcribe;
 use std::thread::{self, sleep};
 use transcribe::trans;
 mod record;
-use async_std::future;
 use clap::{Parser, Subcommand};
 use clipboard::ClipboardContext;
 use clipboard::ClipboardProvider;
@@ -219,18 +218,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 // Whisper API can't handle less than 0.1 seconds of audio.
                                 // So we'll only transcribe if the recording is longer than 0.2 seconds.
                                 if elapsed.as_secs_f32() > 0.2 {
-                                    let transcription_result = match runtime.block_on(
-                                        future::timeout(
-                                            Duration::from_secs(10),
-                                            trans::transcribe(&client, &voice_tmp_path),
-                                        ),
-                                    ) {
-                                        Ok(transcription_result) => transcription_result,
-                                        Err(err) => {
-                                            println!("Error: Failed to transcribe audio due to timeout: {:?}", err);
-                                            continue;
-                                        }
-                                    };
+                                    let transcription_result = runtime.block_on(
+                                        trans::transcribe_with_retry(&client, &voice_tmp_path, 3),
+                                    );
 
                                     let mut transcription = match transcription_result {
                                         Ok(transcription) => transcription,
@@ -277,11 +267,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         // Set and paste Clipboard Contents
                                         match clipboard.set_contents(transcription) {
                                             Ok(_) => {
-                                                Enigo.key_sequence_parse("{+CTRL}");
+                                                enigo.key_sequence_parse("{+CTRL}");
                                                 sleep(Duration::from_millis(100));
-                                                Enigo.key_sequence_parse("v");
+                                                enigo.key_sequence_parse("v");
                                                 sleep(Duration::from_millis(100));
-                                                Enigo.key_sequence_parse("{-CTRL}");
+                                                enigo.key_sequence_parse("{-CTRL}");
                                                 sleep(Duration::from_millis(100));
 
                                                 // restore the clipboard contents
