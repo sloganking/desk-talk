@@ -1,7 +1,9 @@
 pub mod trans {
 
-    use anyhow::{bail, Context};
+    use anyhow::{anyhow, bail, Context};
     use async_openai::{config::OpenAIConfig, types::CreateTranscriptionRequestArgs, Client};
+    use async_std::future;
+    use std::time::Duration;
     use std::{
         error::Error,
         path::{Path, PathBuf},
@@ -78,5 +80,43 @@ pub mod trans {
             .context("Failed to get OpenAI API transcription response.")?;
 
         Ok(response.text)
+    }
+
+    pub async fn transcribe_with_retry(
+        client: &Client<OpenAIConfig>,
+        input: &Path,
+        attempts: usize,
+    ) -> Result<String, Box<dyn Error>> {
+        let mut last_err: Option<Box<dyn Error>> = None;
+
+        for attempt in 0..attempts {
+            match future::timeout(Duration::from_secs(10), transcribe(client, input)).await {
+                Ok(res) => match res {
+                    Ok(text) => return Ok(text),
+                    Err(e) => {
+                        eprintln!(
+                            "Transcription attempt {}/{} failed: {:?}",
+                            attempt + 1,
+                            attempts,
+                            e
+                        );
+                        last_err = Some(e);
+                    }
+                },
+                Err(e) => {
+                    eprintln!(
+                        "Transcription attempt {}/{} timed out: {:?}",
+                        attempt + 1,
+                        attempts,
+                        e
+                    );
+                    last_err = Some(anyhow!("Timeout").into());
+                }
+            }
+
+            // No delay between retries so we don't block the user
+        }
+
+        Err(last_err.unwrap_or_else(|| Box::<dyn Error>::from(anyhow!("Unknown error"))))
     }
 }
