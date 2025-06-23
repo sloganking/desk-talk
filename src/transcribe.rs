@@ -162,6 +162,10 @@ pub mod trans {
         let res = model
             .transcribe_audio(bytes, false, false, None)
             .map_err(|e| anyhow!("{:?}", e))?;
-        Ok(res.as_text())
+
+        let mut res = res.as_text();
+        res = res.replace("\n", " "); // Remove double spaces
+        res = res.trim().to_string();
+        Ok(res)
     }
 }
