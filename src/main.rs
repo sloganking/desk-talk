@@ -48,6 +48,10 @@ struct Opt {
     #[arg(long, value_enum, requires = "local")]
     model: Option<LocalModel>,
 
+    /// Use the GPU for local transcription when available.
+    #[arg(long, requires = "local")]
+    use_gpu: bool,
+
     /// Ensures the first letter of the transcription is capitalized.
     #[arg(short, long)]
     cap_first: bool,
@@ -318,7 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         let model = opt
                                             .model
                                             .expect("--model required when --local is used");
-                                        trans::transcribe_local(&voice_tmp_path, model.into())
+                                        trans::transcribe_local(&voice_tmp_path, model.into(), opt.use_gpu)
                                     } else {
                                         runtime.block_on(trans::transcribe_with_retry(
                                             &client,

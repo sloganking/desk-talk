@@ -4,7 +4,11 @@ pub mod trans {
     use async_openai::{config::OpenAIConfig, types::CreateTranscriptionRequestArgs, Client};
     use async_std::future;
     use directories::ProjectDirs;
-    use mutter::{Model, ModelType};
+    use mutter::ModelType;
+    use rodio::{source::UniformSourceIterator, Decoder, Source};
+    use std::io::Cursor;
+    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+    use num_cpus;
     use std::fs;
     use std::time::Duration;
     use std::{
@@ -137,13 +141,19 @@ pub mod trans {
         Ok(cache_dir.join(filename))
     }
 
-    fn load_or_download_model(model: &ModelType) -> Result<Model, Box<dyn Error>> {
+    fn load_or_download_context(
+        model: &ModelType,
+        use_gpu: bool,
+    ) -> Result<WhisperContext, Box<dyn Error>> {
         use std::io::Read;
 
         let path = get_model_path(model)?;
+        let mut params = WhisperContextParameters::default();
+        params.use_gpu(use_gpu);
+
         if path.exists() {
             let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid model path"))?;
-            Ok(Model::new(path_str).map_err(|e| anyhow!("{:?}", e))?)
+            Ok(WhisperContext::new_with_params(path_str, params).map_err(|e| anyhow!("{:?}", e))?)
         } else {
             let resp = ureq::get(&model.to_string())
                 .call()
@@ -151,20 +161,57 @@ pub mod trans {
             let mut bytes = Vec::new();
             resp.into_reader().read_to_end(&mut bytes)?;
             std::fs::write(&path, &bytes)?;
-            let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid model path"))?;
-            Ok(Model::new(path_str).map_err(|e| anyhow!("{:?}", e))?)
+            Ok(WhisperContext::new_from_buffer_with_params(&bytes, params).map_err(|e| anyhow!("{:?}", e))?)
         }
     }
 
-    pub fn transcribe_local(input: &Path, model_type: ModelType) -> Result<String, Box<dyn Error>> {
-        let model = load_or_download_model(&model_type)?;
-        let bytes = fs::read(input)?;
-        let res = model
-            .transcribe_audio(bytes, false, false, None)
-            .map_err(|e| anyhow!("{:?}", e))?;
+    fn decode_audio(bytes: Vec<u8>) -> Result<Vec<f32>, Box<dyn Error>> {
+        let input = Cursor::new(bytes);
+        let source = Decoder::new(input).unwrap();
+        let output_sample_rate = 16000;
+        let channels = 1;
+        let resample = UniformSourceIterator::new(source, channels, output_sample_rate);
+        let pass_filter = resample.low_pass(3000).high_pass(200).convert_samples();
+        let samples: Vec<i16> = pass_filter.collect::<Vec<i16>>();
+        let mut output: Vec<f32> = vec![0.0f32; samples.len()];
+        whisper_rs::convert_integer_to_float_audio(&samples, &mut output)
+            .map(|()| output)
+            .map_err(|e| anyhow!("{:?}", e).into())
+    }
 
-        let mut res = res.as_text();
-        res = res.replace("\n", " "); // Remove double spaces
+    pub fn transcribe_local(
+        input: &Path,
+        model_type: ModelType,
+        use_gpu: bool,
+    ) -> Result<String, Box<dyn Error>> {
+        let ctx = load_or_download_context(&model_type, use_gpu)?;
+        let bytes = fs::read(input)?;
+        let samples = decode_audio(bytes)?;
+
+        let mut params = FullParams::new(SamplingStrategy::BeamSearch { beam_size: 5, patience: 1.0 });
+        params.set_translate(false);
+        params.set_print_special(false);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_timestamps(false);
+        params.set_token_timestamps(false);
+        params.set_split_on_word(true);
+        params.set_n_threads(num_cpus::get() as i32);
+
+        let mut state = ctx.create_state().expect("failed to create state");
+        state.full(params, &samples).expect("failed to transcribe");
+
+        let num_segments = state.full_n_segments().expect("failed to get segments");
+        let mut result = String::new();
+        for i in 0..num_segments {
+            let segment = state
+                .full_get_segment_text(i)
+                .map_err(|e| anyhow!("{:?}", e))?;
+            result.push_str(&segment);
+            result.push(' ');
+        }
+
+        let mut res = result.replace('\n', " ");
         res = res.trim().to_string();
         Ok(res)
     }

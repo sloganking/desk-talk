@@ -73,6 +73,12 @@ To run transcription locally without the OpenAI API, specify a model size with
 desk-talk --ptt-key scroll-lock --local --model tiny
 ```
 
+To run the local model on the GPU (when built with GPU support), add `--use-gpu`:
+
+```
+desk-talk --ptt-key scroll-lock --local --model tiny --use-gpu
+```
+
 Available models include `tiny`, `base`, `small`, `medium`, and the large
 variants `large-v1`, `large-v2`, or `large-v3`.
 
