@@ -863,11 +863,13 @@ dependencies = [
  "flume",
  "hound",
  "mutter",
+ "num_cpus",
  "rdev",
  "rodio 0.17.3",
  "tempfile",
  "tokio",
  "ureq",
+ "whisper-rs",
 ]
 
 [[package]]
