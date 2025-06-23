@@ -805,6 +805,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
+name = "default-device-sink"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca2dc7fa1e66bc2bc8e0d35995f57effa7ee2e83f0a13f24451ab9aa49f8da76"
+dependencies = [
+ "cpal",
+ "once_cell",
+ "rodio",
+]
+
+[[package]]
 name = "derive_builder"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -846,12 +857,14 @@ dependencies = [
  "clipboard",
  "cpal",
  "directories",
+ "default-device-sink",
  "dotenvy",
  "enigo",
  "flume",
  "hound",
  "mutter",
  "rdev",
+ "rodio",
  "tempfile",
  "tokio",
  "ureq",
@@ -2014,15 +2027,6 @@ name = "ogg"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13e571c3517af9e1729d4c63571a27edd660ade0667973bfc74a67c660c2b651"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
-name = "ogg"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6951b4e8bf21c8193da321bcce9c9dd2e13c858fe078bf9054a288b419ae5d6e"
 dependencies = [
  "byteorder",
 ]

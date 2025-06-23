@@ -16,6 +16,11 @@ use rdev::{listen, Event};
 use record::rec;
 use std::error::Error;
 use std::time::Duration;
+use default_device_sink::DefaultDeviceSink;
+use rodio::Decoder;
+use rodio::source::{SineWave, Source};
+use std::io::{BufReader, Cursor};
+use std::sync::mpsc;
 mod easy_rdev_key;
 use crate::easy_rdev_key::PTTKey;
 use mutter::ModelType;
@@ -78,6 +83,48 @@ fn capitalize_first_letter(s: &mut String) {
         let first_char_len = f.len_utf8();
         s.replace_range(0..first_char_len, &uppercase);
     }
+}
+
+static TICK_BYTES: &[u8] = include_bytes!("../assets/tick.mp3");
+static FAILED_BYTES: &[u8] = include_bytes!("../assets/failed.mp3");
+
+fn tick_loop(stop_rx: mpsc::Receiver<()>) {
+    let tick_sink = DefaultDeviceSink::new();
+    loop {
+        if stop_rx.try_recv().is_ok() {
+            tick_sink.stop();
+            break;
+        }
+        if tick_sink.empty() {
+            let cursor = Cursor::new(TICK_BYTES);
+            if let Ok(decoder) = Decoder::new(BufReader::new(cursor)) {
+                tick_sink.stop();
+                tick_sink.append(decoder);
+            } else {
+                tick_sink.stop();
+                tick_sink.append(
+                    SineWave::new(880.0)
+                        .take_duration(Duration::from_millis(50))
+                        .amplify(0.20),
+                );
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn play_failure_sound() {
+    let sink = DefaultDeviceSink::new();
+    if let Ok(decoder) = Decoder::new(BufReader::new(Cursor::new(FAILED_BYTES))) {
+        sink.append(decoder);
+    } else {
+        sink.append(
+            SineWave::new(440.0)
+                .take_duration(Duration::from_millis(150))
+                .amplify(0.20),
+        );
+    }
+    sink.sleep_until_end();
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -224,6 +271,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 // Whisper API can't handle less than 0.1 seconds of audio.
                                 // So we'll only transcribe if the recording is longer than 0.2 seconds.
                                 if elapsed.as_secs_f32() > 0.2 {
+                                    let (tick_tx, tick_rx) = mpsc::channel();
+                                    let tick_handle = thread::spawn(move || tick_loop(tick_rx));
+                                  
                                     let transcription_result = if opt.local {
                                         trans::transcribe_local(&voice_tmp_path, ModelType::Tiny)
                                     } else {
@@ -232,6 +282,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         )
                                     };
 
+                                    let _ = tick_tx.send(());
+                                    let _ = tick_handle.join();
+
                                     let mut transcription = match transcription_result {
                                         Ok(transcription) => transcription,
                                         Err(err) => {
@@ -239,6 +292,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                                 "Error: Failed to transcribe audio: {:?}",
                                                 err
                                             );
+                                            play_failure_sound();
                                             continue;
                                         }
                                     };
