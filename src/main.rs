@@ -12,15 +12,15 @@ use clap::{Parser, Subcommand};
 use clipboard::ClipboardContext;
 use clipboard::ClipboardProvider;
 use cpal::traits::{DeviceTrait, HostTrait};
+use default_device_sink::DefaultDeviceSink;
 use rdev::{listen, Event};
 use record::rec;
-use std::error::Error;
-use std::time::Duration;
-use default_device_sink::DefaultDeviceSink;
-use rodio::Decoder;
 use rodio::source::{SineWave, Source};
+use rodio::Decoder;
+use std::error::Error;
 use std::io::{BufReader, Cursor};
 use std::sync::mpsc;
+use std::time::Duration;
 mod easy_rdev_key;
 use crate::easy_rdev_key::PTTKey;
 use mutter::ModelType;
@@ -273,13 +273,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 if elapsed.as_secs_f32() > 0.2 {
                                     let (tick_tx, tick_rx) = mpsc::channel();
                                     let tick_handle = thread::spawn(move || tick_loop(tick_rx));
-                                  
+
                                     let transcription_result = if opt.local {
                                         trans::transcribe_local(&voice_tmp_path, ModelType::Tiny)
                                     } else {
-                                        runtime.block_on(
-                                            trans::transcribe_with_retry(&client, &voice_tmp_path, 3),
-                                        )
+                                        runtime.block_on(trans::transcribe_with_retry(
+                                            &client,
+                                            &voice_tmp_path,
+                                            3,
+                                        ))
                                     };
 
                                     let _ = tick_tx.send(());
