@@ -3,6 +3,9 @@ pub mod trans {
     use anyhow::{anyhow, bail, Context};
     use async_openai::{config::OpenAIConfig, types::CreateTranscriptionRequestArgs, Client};
     use async_std::future;
+    use directories::ProjectDirs;
+    use mutter::{Model, ModelType};
+    use std::fs;
     use std::time::Duration;
     use std::{
         error::Error,
@@ -10,6 +13,7 @@ pub mod trans {
         process::Command,
     };
     use tempfile::tempdir;
+    use ureq;
 
     /// Moves audio to mp3.
     /// Ignores output's extension if it is passed one.
@@ -118,5 +122,46 @@ pub mod trans {
         }
 
         Err(last_err.unwrap_or_else(|| Box::<dyn Error>::from(anyhow!("Unknown error"))))
+    }
+
+    fn get_model_path(model: &ModelType) -> Result<std::path::PathBuf, Box<dyn Error>> {
+        let dirs = ProjectDirs::from("", "", "desk-talk")
+            .ok_or_else(|| anyhow!("Unable to determine project directory"))?;
+        let cache_dir = dirs.cache_dir();
+        std::fs::create_dir_all(cache_dir)?;
+        let url = model.to_string();
+        let filename = url
+            .split('/')
+            .last()
+            .ok_or_else(|| anyhow!("Bad model url"))?;
+        Ok(cache_dir.join(filename))
+    }
+
+    fn load_or_download_model(model: &ModelType) -> Result<Model, Box<dyn Error>> {
+        use std::io::Read;
+
+        let path = get_model_path(model)?;
+        if path.exists() {
+            let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid model path"))?;
+            Ok(Model::new(path_str).map_err(|e| anyhow!("{:?}", e))?)
+        } else {
+            let resp = ureq::get(&model.to_string())
+                .call()
+                .map_err(|e| anyhow!("Download error: {:?}", e))?;
+            let mut bytes = Vec::new();
+            resp.into_reader().read_to_end(&mut bytes)?;
+            std::fs::write(&path, &bytes)?;
+            let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid model path"))?;
+            Ok(Model::new(path_str).map_err(|e| anyhow!("{:?}", e))?)
+        }
+    }
+
+    pub fn transcribe_local(input: &Path, model_type: ModelType) -> Result<String, Box<dyn Error>> {
+        let model = load_or_download_model(&model_type)?;
+        let bytes = fs::read(input)?;
+        let res = model
+            .transcribe_audio(bytes, false, false, None)
+            .map_err(|e| anyhow!("{:?}", e))?;
+        Ok(res.as_text())
     }
 }
