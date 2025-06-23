@@ -50,11 +50,11 @@ desk-talk --special-ptt-key 125
 
 ### Non-default recording device
 
-To use a microphone other than the system default, run 
+To use a microphone other than the system default, run
 
 
 ```
-desk-talk list-devices    
+desk-talk list-devices
 ```
 
 to get a list of system microphone names. And pass the desired microphone name to ``--device`` like so:
@@ -63,5 +63,17 @@ to get a list of system microphone names. And pass the desired microphone name t
 ```
 desk-talk --ptt-key scroll-lock --device "Microphone (3- USB Audio Device)"
 ```
+
+### Local transcription
+
+To run transcription locally without the OpenAI API, specify a model size with
+`--model` and pass the `--local` flag:
+
+```
+desk-talk --ptt-key scroll-lock --local --model tiny
+```
+
+Available models include `tiny`, `base`, `small`, `medium`, and the large
+variants `large-v1`, `large-v2`, or `large-v3`.
 
 

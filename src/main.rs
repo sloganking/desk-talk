@@ -8,7 +8,7 @@ mod transcribe;
 use std::thread::{self, sleep};
 use transcribe::trans;
 mod record;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use clipboard::ClipboardContext;
 use clipboard::ClipboardProvider;
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -44,6 +44,10 @@ struct Opt {
     #[arg(long)]
     local: bool,
 
+    /// The local whisper model to use. Requires --local.
+    #[arg(long, value_enum, requires = "local")]
+    model: Option<LocalModel>,
+
     /// Ensures the first letter of the transcription is capitalized.
     #[arg(short, long)]
     cap_first: bool,
@@ -74,6 +78,39 @@ pub enum SubCommands {
     ShowKeyPresses,
     /// Lists the audio input devices on your system.
     ListDevices,
+}
+
+#[derive(ValueEnum, Clone, Debug, Copy)]
+pub enum LocalModel {
+    TinyEn,
+    Tiny,
+    BaseEn,
+    Base,
+    SmallEn,
+    Small,
+    MediumEn,
+    Medium,
+    LargeV1,
+    LargeV2,
+    LargeV3,
+}
+
+impl From<LocalModel> for ModelType {
+    fn from(model: LocalModel) -> Self {
+        match model {
+            LocalModel::TinyEn => ModelType::TinyEn,
+            LocalModel::Tiny => ModelType::Tiny,
+            LocalModel::BaseEn => ModelType::BaseEn,
+            LocalModel::Base => ModelType::Base,
+            LocalModel::SmallEn => ModelType::SmallEn,
+            LocalModel::Small => ModelType::Small,
+            LocalModel::MediumEn => ModelType::MediumEn,
+            LocalModel::Medium => ModelType::Medium,
+            LocalModel::LargeV1 => ModelType::LargeV1,
+            LocalModel::LargeV2 => ModelType::LargeV2,
+            LocalModel::LargeV3 => ModelType::LargeV3,
+        }
+    }
 }
 
 fn capitalize_first_letter(s: &mut String) {
@@ -204,6 +241,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("OPENAI_API_KEY not set. Please pass your API key as an argument or assign is to the 'OPENAI_API_KEY' env var using terminal or .env file.");
                     return Ok(());
                 }
+            } else if opt.model.is_none() {
+                println!("--model must be specified when using --local");
+                return Ok(());
             }
 
             let (tx, rx): (flume::Sender<Event>, flume::Receiver<Event>) = flume::unbounded();
@@ -275,7 +315,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     let tick_handle = thread::spawn(move || tick_loop(tick_rx));
 
                                     let transcription_result = if opt.local {
-                                        trans::transcribe_local(&voice_tmp_path, ModelType::Tiny)
+                                        let model = opt
+                                            .model
+                                            .expect("--model required when --local is used");
+                                        trans::transcribe_local(&voice_tmp_path, model.into())
                                     } else {
                                         runtime.block_on(trans::transcribe_with_retry(
                                             &client,
