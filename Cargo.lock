@@ -812,7 +812,7 @@ checksum = "ca2dc7fa1e66bc2bc8e0d35995f57effa7ee2e83f0a13f24451ab9aa49f8da76"
 dependencies = [
  "cpal",
  "once_cell",
- "rodio",
+ "rodio 0.17.3",
 ]
 
 [[package]]
@@ -856,15 +856,15 @@ dependencies = [
  "clap",
  "clipboard",
  "cpal",
- "directories",
  "default-device-sink",
+ "directories",
  "dotenvy",
  "enigo",
  "flume",
  "hound",
  "mutter",
  "rdev",
- "rodio",
+ "rodio 0.17.3",
  "tempfile",
  "tokio",
  "ureq",
@@ -1790,7 +1790,7 @@ dependencies = [
  "log",
  "num",
  "num_cpus",
- "rodio",
+ "rodio 0.18.1",
  "serde",
  "serde_json",
  "strum",
@@ -2027,6 +2027,15 @@ name = "ogg"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13e571c3517af9e1729d4c63571a27edd660ade0667973bfc74a67c660c2b651"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
+name = "ogg"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6951b4e8bf21c8193da321bcce9c9dd2e13c858fe078bf9054a288b419ae5d6e"
 dependencies = [
  "byteorder",
 ]
@@ -2310,6 +2319,19 @@ dependencies = [
  "spin",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rodio"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b1bb7b48ee48471f55da122c0044fcc7600cfcc85db88240b89cb832935e611"
+dependencies = [
+ "claxon",
+ "cpal",
+ "hound",
+ "lewton 0.10.2",
+ "symphonia",
 ]
 
 [[package]]

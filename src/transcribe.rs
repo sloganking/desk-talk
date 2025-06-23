@@ -5,7 +5,6 @@ pub mod trans {
     use async_std::future;
     use directories::ProjectDirs;
     use mutter::{Model, ModelType};
-    use ureq;
     use std::fs;
     use std::time::Duration;
     use std::{
@@ -14,6 +13,7 @@ pub mod trans {
         process::Command,
     };
     use tempfile::tempdir;
+    use ureq;
 
     /// Moves audio to mp3.
     /// Ignores output's extension if it is passed one.
@@ -130,7 +130,10 @@ pub mod trans {
         let cache_dir = dirs.cache_dir();
         std::fs::create_dir_all(cache_dir)?;
         let url = model.to_string();
-        let filename = url.split('/').last().ok_or_else(|| anyhow!("Bad model url"))?;
+        let filename = url
+            .split('/')
+            .last()
+            .ok_or_else(|| anyhow!("Bad model url"))?;
         Ok(cache_dir.join(filename))
     }
 
