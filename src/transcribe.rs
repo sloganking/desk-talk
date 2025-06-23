@@ -140,7 +140,7 @@ pub mod trans {
         let path = get_model_path(model)?;
         if path.exists() {
             let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid model path"))?;
-            Ok(Model::new(path_str).map_err(|e| anyhow!(e))?)
+            Ok(Model::new(path_str).map_err(|e| anyhow!("{:?}", e))?)
         } else {
             let resp = ureq::get(&model.to_string())
                 .call()
@@ -149,7 +149,7 @@ pub mod trans {
             resp.into_reader().read_to_end(&mut bytes)?;
             std::fs::write(&path, &bytes)?;
             let path_str = path.to_str().ok_or_else(|| anyhow!("Invalid model path"))?;
-            Ok(Model::new(path_str).map_err(|e| anyhow!(e))?)
+            Ok(Model::new(path_str).map_err(|e| anyhow!("{:?}", e))?)
         }
     }
 
@@ -158,7 +158,7 @@ pub mod trans {
         let bytes = fs::read(input)?;
         let res = model
             .transcribe_audio(bytes, false, false, None)
-            .map_err(|e| anyhow!(e))?;
+            .map_err(|e| anyhow!("{:?}", e))?;
         Ok(res.as_text())
     }
 }
