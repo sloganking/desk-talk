@@ -18,6 +18,7 @@ use std::error::Error;
 use std::time::Duration;
 mod easy_rdev_key;
 use crate::easy_rdev_key::PTTKey;
+use mutter::ModelType;
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -33,6 +34,10 @@ struct Opt {
     /// The push to talk key
     #[arg(short, long)]
     ptt_key: Option<PTTKey>,
+
+    /// Use local whisper model instead of OpenAI API
+    #[arg(long)]
+    local: bool,
 
     /// Ensures the first letter of the transcription is capitalized.
     #[arg(short, long)]
@@ -143,14 +148,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 },
             };
 
-            if let Some(api_key) = opt.api_key {
-                env::set_var("OPENAI_API_KEY", api_key);
-            }
+            if !opt.local {
+                if let Some(api_key) = opt.api_key {
+                    env::set_var("OPENAI_API_KEY", api_key);
+                }
 
-            // Fail if OPENAI_API_KEY is not set
-            if env::var("OPENAI_API_KEY").is_err() {
-                println!("OPENAI_API_KEY not set. Please pass your API key as an argument or assign is to the 'OPENAI_API_KEY' env var using terminal or .env file.");
-                return Ok(());
+                if env::var("OPENAI_API_KEY").is_err() {
+                    println!("OPENAI_API_KEY not set. Please pass your API key as an argument or assign is to the 'OPENAI_API_KEY' env var using terminal or .env file.");
+                    return Ok(());
+                }
             }
 
             let (tx, rx): (flume::Sender<Event>, flume::Receiver<Event>) = flume::unbounded();
@@ -218,9 +224,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 // Whisper API can't handle less than 0.1 seconds of audio.
                                 // So we'll only transcribe if the recording is longer than 0.2 seconds.
                                 if elapsed.as_secs_f32() > 0.2 {
-                                    let transcription_result = runtime.block_on(
-                                        trans::transcribe_with_retry(&client, &voice_tmp_path, 3),
-                                    );
+                                    let transcription_result = if opt.local {
+                                        trans::transcribe_local(&voice_tmp_path, ModelType::Tiny)
+                                    } else {
+                                        runtime.block_on(
+                                            trans::transcribe_with_retry(&client, &voice_tmp_path, 3),
+                                        )
+                                    };
 
                                     let mut transcription = match transcription_result {
                                         Ok(transcription) => transcription,
