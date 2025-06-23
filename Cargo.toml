@@ -29,3 +29,11 @@ rodio = "0.17"
 default-device-sink = "0.1"
 whisper-rs = "0.11.1"
 num_cpus = "1.16"
+
+[features]
+# Enable CUDA support by building with `--features cuda`
+cuda = ["whisper-rs/cuda"]
+# Enable OpenCL support by building with `--features opencl`
+opencl = ["whisper-rs/opencl"]
+# Enable Metal support by building with `--features metal`
+metal = ["whisper-rs/metal"]

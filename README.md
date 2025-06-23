@@ -79,6 +79,16 @@ To run the local model on the GPU (when built with GPU support), add `--use-gpu`
 desk-talk --ptt-key scroll-lock --local --model tiny --use-gpu
 ```
 
+When compiling from source, GPU support requires enabling one of the
+`cuda`, `opencl`, or `metal` features. For example, to build with CUDA support
+run:
+
+```
+cargo build --release --features cuda
+```
+
+Replace `cuda` with the appropriate feature for your hardware.
+
 Available models include `tiny`, `base`, `small`, `medium`, and the large
 variants `large-v1`, `large-v2`, or `large-v3`.
 
