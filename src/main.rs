@@ -18,6 +18,7 @@ use std::error::Error;
 use std::time::Duration;
 use default_device_sink::DefaultDeviceSink;
 use rodio::Decoder;
+use rodio::source::{SineWave, Source};
 use std::io::{BufReader, Cursor};
 use std::sync::mpsc;
 mod easy_rdev_key;
@@ -95,7 +96,12 @@ fn tick_loop(stop_rx: mpsc::Receiver<()>) {
                 tick_sink.stop();
                 tick_sink.append(decoder);
             } else {
-                break;
+                tick_sink.stop();
+                tick_sink.append(
+                    SineWave::new(880.0)
+                        .take_duration(Duration::from_millis(50))
+                        .amplify(0.20),
+                );
             }
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -106,8 +112,14 @@ fn play_failure_sound() {
     let sink = DefaultDeviceSink::new();
     if let Ok(decoder) = Decoder::new(BufReader::new(Cursor::new(FAILED_BYTES))) {
         sink.append(decoder);
-        sink.sleep_until_end();
+    } else {
+        sink.append(
+            SineWave::new(440.0)
+                .take_duration(Duration::from_millis(150))
+                .amplify(0.20),
+        );
     }
+    sink.sleep_until_end();
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
