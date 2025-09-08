@@ -124,7 +124,7 @@ pub mod rec {
                 .default_input_config()
                 .context("Failed to get default input config")?;
 
-            println!("Default input config: {:?}", config);
+            // println!("Default input config: {:?}", config);
 
             // The WAV file we're recording to.
             let spec = wav_spec_from_config(&config);
