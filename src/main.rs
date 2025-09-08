@@ -366,6 +366,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         continue;
                                     }
 
+                                    let word_count = transcription.split_whitespace().count();
+                                    let duration_secs = elapsed.as_secs_f64();
                                     if opt.type_chars {
                                         enigo.key_sequence(&transcription);
                                     } else {
@@ -404,6 +406,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                                 continue;
                                             }
                                         }
+                                    }
+                                    if duration_secs > 0.0 {
+                                        let wpm = (word_count as f64) * 60.0 / duration_secs;
+                                        println!(
+                                            "WPM: {:.1} ({} words over {:.2}s)",
+                                            wpm, word_count, duration_secs
+                                        );
                                     }
                                 } else {
                                     println!("Recording too short");
