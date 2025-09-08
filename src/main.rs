@@ -17,6 +17,7 @@ use rdev::{listen, Event};
 use record::rec;
 use rodio::source::{SineWave, Source};
 use rodio::Decoder;
+use std::collections::VecDeque;
 use std::error::Error;
 use std::io::{BufReader, Cursor};
 use std::sync::mpsc;
@@ -257,6 +258,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .unwrap();
                 let mut enigo = Enigo::new();
 
+                // Track rolling average of WPM
+                let mut wpm_history: VecDeque<f64> = VecDeque::new();
+                let mut wpm_sum: f64 = 0.0;
+                const WPM_ROLLING_MAX: usize = 1000;
+
                 let tmp_dir = tempdir().unwrap();
                 // println!("{:?}", tmp_dir.path());
                 let voice_tmp_path = tmp_dir.path().join("voice_tmp.wav");
@@ -409,9 +415,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     if duration_secs > 0.0 {
                                         let wpm = (word_count as f64) * 60.0 / duration_secs;
+                                        // Update rolling average
+                                        wpm_history.push_back(wpm);
+                                        wpm_sum += wpm;
+                                        if wpm_history.len() > WPM_ROLLING_MAX {
+                                            if let Some(removed) = wpm_history.pop_front() {
+                                                wpm_sum -= removed;
+                                            }
+                                        }
+                                        let avg_wpm = if !wpm_history.is_empty() {
+                                            wpm_sum / (wpm_history.len() as f64)
+                                        } else {
+                                            0.0
+                                        };
                                         println!(
-                                            "WPM: {:.1} ({} words over {:.2}s)",
-                                            wpm, word_count, duration_secs
+                                            "WPM: {:.1} ({} words over {:.2}s) | Avg: {:.1}",
+                                            wpm, word_count, duration_secs, avg_wpm
                                         );
                                     }
                                 } else {
