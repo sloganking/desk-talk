@@ -262,6 +262,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut wpm_history: VecDeque<f64> = VecDeque::new();
                 let mut wpm_sum: f64 = 0.0;
                 const WPM_ROLLING_MAX: usize = 1000;
+                let mut total_words_transcribed: usize = 0;
+                let mut total_recording_secs: f64 = 0.0;
 
                 let tmp_dir = tempdir().unwrap();
                 // println!("{:?}", tmp_dir.path());
@@ -428,9 +430,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         } else {
                                             0.0
                                         };
+                                        // Update cumulative totals and print summary
+                                        total_words_transcribed += word_count;
+                                        total_recording_secs += duration_secs;
                                         println!(
-                                            "WPM: {:.1} ({} words over {:.2}s) | Avg: {:.1}",
-                                            wpm, word_count, duration_secs, avg_wpm
+                                            "WPM: {:.1} ({} words over {:.2}s) | Avg: {:.1} | Total: {} words, {:.2}s",
+                                            wpm,
+                                            word_count,
+                                            duration_secs,
+                                            avg_wpm,
+                                            total_words_transcribed,
+                                            total_recording_secs
                                         );
                                     }
                                 } else {
