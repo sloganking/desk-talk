@@ -123,6 +123,35 @@ fn capitalize_first_letter(s: &mut String) {
     }
 }
 
+fn format_human_duration(total_seconds_f64: f64) -> String {
+    if total_seconds_f64.is_nan() || !total_seconds_f64.is_finite() || total_seconds_f64 < 0.0 {
+        return String::from("0s");
+    }
+    if total_seconds_f64 < 1.0 {
+        return format!("{:.2}s", total_seconds_f64);
+    }
+    if total_seconds_f64 < 60.0 {
+        return format!("{:.0}s", total_seconds_f64);
+    }
+
+    let total_seconds = total_seconds_f64.floor() as u64;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+
+    let mut parts: Vec<String> = Vec::new();
+    if hours > 0 {
+        parts.push(format!("{}h", hours));
+    }
+    if minutes > 0 {
+        parts.push(format!("{}m", minutes));
+    }
+    if seconds > 0 || parts.is_empty() {
+        parts.push(format!("{}s", seconds));
+    }
+    parts.join(" ")
+}
+
 static TICK_BYTES: &[u8] = include_bytes!("../assets/tick.mp3");
 static FAILED_BYTES: &[u8] = include_bytes!("../assets/failed.mp3");
 
@@ -433,14 +462,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         // Update cumulative totals and print summary
                                         total_words_transcribed += word_count;
                                         total_recording_secs += duration_secs;
+                                        let human_duration = format_human_duration(duration_secs);
+                                        let human_total =
+                                            format_human_duration(total_recording_secs);
                                         println!(
-                                            "WPM: {:.1} ({} words over {:.2}s) | Avg: {:.1} | Total: {} words, {:.2}s",
+                                            "WPM: {:.1} ({} words over {}) | Avg: {:.1} | Total: {} words, {}",
                                             wpm,
                                             word_count,
-                                            duration_secs,
+                                            human_duration,
                                             avg_wpm,
                                             total_words_transcribed,
-                                            total_recording_secs
+                                            human_total
                                         );
                                     }
                                 } else {
