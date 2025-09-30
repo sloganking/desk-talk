@@ -8,6 +8,7 @@ use crate::easy_rdev_key::PTTKey;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ptt_key: Option<PTTKey>,
     pub special_ptt_key: Option<u32>,
     pub device: String,

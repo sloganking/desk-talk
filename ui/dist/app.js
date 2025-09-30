@@ -45,7 +45,15 @@ async function loadConfig() {
         
         // General settings
         if (config.ptt_key) {
-            document.getElementById('pttKey').value = config.ptt_key;
+            const select = document.getElementById('pttKey');
+            const optionExists = Array.from(select.options).some(option => option.value === config.ptt_key);
+            if (!optionExists) {
+                const option = document.createElement('option');
+                option.value = config.ptt_key;
+                option.textContent = config.ptt_key;
+                select.appendChild(option);
+            }
+            select.value = config.ptt_key;
         }
         document.getElementById('audioDevice').value = config.device || 'default';
         document.getElementById('capFirst').checked = config.cap_first || false;
