@@ -355,4 +355,11 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadAudioDevices();
         console.log('Initialization complete');
     })();
+
+    setInterval(() => {
+        const statsTab = document.getElementById('stats');
+        if (statsTab && statsTab.classList.contains('active')) {
+            loadStatistics();
+        }
+    }, 1500);
 });
