@@ -317,7 +317,7 @@ impl TranscriptionEngine {
                                     0.0
                                 };
 
-                                app_state.update_statistics(word_count, duration_secs, avg_wpm);
+                                app_state.update_statistics(word_count, duration_secs, wpm);
 
                                 println!(
                                     "WPM: {:.1} | Avg: {:.1} | Total: {} words",

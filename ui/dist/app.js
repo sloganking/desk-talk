@@ -157,9 +157,15 @@ async function loadStatistics() {
         document.getElementById('totalWords').textContent = stats.total_words || 0;
         document.getElementById('avgWPM').textContent = (stats.average_wpm || 0).toFixed(1);
         document.getElementById('sessionCount').textContent = stats.session_count || 0;
-        
-        const totalMins = Math.floor((stats.total_recording_time_secs || 0) / 60);
-        document.getElementById('totalTime').textContent = totalMins + 'm';
+
+        const totalSeconds = stats.total_recording_time_secs || 0;
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = Math.floor(totalSeconds % 60);
+        if (minutes > 0) {
+            document.getElementById('totalTime').textContent = `${minutes}m ${seconds}s`;
+        } else {
+            document.getElementById('totalTime').textContent = `${seconds}s`;
+        }
     } catch (error) {
         console.error('Error loading statistics:', error);
     }
@@ -356,10 +362,10 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Initialization complete');
     })();
 
-    setInterval(() => {
-        const statsTab = document.getElementById('stats');
-        if (statsTab && statsTab.classList.contains('active')) {
-            loadStatistics();
-        }
-    }, 1500);
+setInterval(() => {
+    const statsTab = document.getElementById('stats');
+    if (statsTab && statsTab.classList.contains('active')) {
+        loadStatistics();
+    }
+}, 1500);
 });

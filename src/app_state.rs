@@ -43,10 +43,10 @@ impl AppState {
         stats.total_words += words;
         stats.total_recording_time_secs += duration_secs;
         stats.session_count += 1;
-        
-        // Update rolling average
+
+        // Update average WPM using latest sample
         let total_sessions = stats.session_count as f64;
-        stats.average_wpm = (stats.average_wpm * (total_sessions - 1.0) + wpm) / total_sessions;
+        stats.average_wpm = ((stats.average_wpm * (total_sessions - 1.0)) + wpm) / total_sessions;
     }
 
     pub fn get_statistics(&self) -> Statistics {
