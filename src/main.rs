@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime, State, WindowEvent,
+    AppHandle, Manager, Runtime, State,
 };
 use transcription_engine::TranscriptionEngine;
 
@@ -224,7 +224,7 @@ fn main() {
             if let Some(window) = app.get_webview_window("settings") {
                 let window_handle = window.clone();
                 window.on_window_event(move |event| {
-                    if let WindowEvent::CloseRequested { api, .. } = event {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = window_handle.hide();
                     }

@@ -66,19 +66,34 @@ impl AppConfig {
     pub fn load() -> Result<Self> {
         let config_path = Self::get_config_path()?;
 
-        if config_path.exists() {
+        let mut config = if config_path.exists() {
             let contents =
                 fs::read_to_string(&config_path).context("Failed to read config file")?;
-            let mut config: AppConfig =
-                serde_json::from_str(&contents).context("Failed to parse config file")?;
-
-            // Load API key from keyring
-            config.api_key = Self::load_api_key().ok();
-
-            Ok(config)
+            serde_json::from_str::<AppConfig>(&contents).context("Failed to parse config file")?
         } else {
-            Ok(Self::default())
+            AppConfig::default()
+        };
+
+        // Load API key from keyring
+        config.api_key = Self::load_api_key().ok();
+
+        if let Ok(env_path) = Self::get_license_env_path() {
+            if env_path.exists() {
+                for (key, val) in Self::parse_env_file(&env_path)? {
+                    match key.as_str() {
+                        "KEYGEN_ACCOUNT_UID" => {
+                            config.license_plan = Some(val);
+                        }
+                        "KEYGEN_PRODUCT_ID" => {
+                            config.trial_expiration = Some(val);
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
+
+        Ok(config)
     }
 
     pub fn save(&self) -> Result<()> {
@@ -214,5 +229,33 @@ impl AppConfig {
         } else {
             None
         }
+    }
+}
+
+impl AppConfig {
+    fn parse_env_file(path: &PathBuf) -> Result<Vec<(String, String)>> {
+        let contents = fs::read_to_string(path)?;
+        Ok(contents
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    return None;
+                }
+                let mut parts = line.splitn(2, '=');
+                match (parts.next(), parts.next()) {
+                    (Some(key), Some(value)) => Some((key.to_string(), value.trim().to_string())),
+                    _ => None,
+                }
+            })
+            .collect())
+    }
+
+    fn get_license_env_path() -> Result<PathBuf> {
+        let exe_dir = std::env::current_exe()?
+            .parent()
+            .context("Failed to get exe directory")?
+            .to_path_buf();
+        Ok(exe_dir.join(".env.licenses"))
     }
 }
