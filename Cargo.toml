@@ -48,3 +48,4 @@ keyring = { version = "3.6", features = [
 ] }
 parking_lot = "0.12"
 once_cell = "1.19"
+winreg = "0.52"

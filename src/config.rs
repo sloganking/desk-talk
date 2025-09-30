@@ -5,6 +5,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::easy_rdev_key::PTTKey;
+#[cfg(windows)]
+use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -91,6 +93,15 @@ impl AppConfig {
             }
         }
 
+        #[cfg(windows)]
+        {
+            if self.auto_start {
+                Self::enable_autostart()?;
+            } else {
+                Self::disable_autostart()?;
+            }
+        }
+
         Ok(())
     }
 
@@ -154,6 +165,32 @@ impl AppConfig {
         entry
             .delete_credential()
             .context("Failed to delete API key from keyring")
+    }
+
+    #[cfg(windows)]
+    fn enable_autostart() -> Result<()> {
+        use std::env;
+
+        let exe_path = env::current_exe()?;
+        let exe_str = exe_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid exe path"))?;
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let path = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+        let (key, _) = hkcu.create_subkey(path)?;
+        key.set_value("DeskTalk", &exe_str)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn disable_autostart() -> Result<()> {
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let path = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+        if let Ok(key) = hkcu.open_subkey(path) {
+            let _ = key.delete_value("DeskTalk");
+        }
+        Ok(())
     }
 
     pub fn get_ptt_key(&self) -> Option<rdev::Key> {
