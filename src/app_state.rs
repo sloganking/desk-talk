@@ -1,10 +1,11 @@
-use crate::config::AppConfig;
+use crate::config::{AppConfig, KeygenConfig};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<RwLock<AppConfig>>,
+    pub keygen: Arc<RwLock<Option<KeygenConfig>>>,
     pub is_running: Arc<RwLock<bool>>,
     pub statistics: Arc<RwLock<Statistics>>,
 }
@@ -18,9 +19,10 @@ pub struct Statistics {
 }
 
 impl AppState {
-    pub fn new(config: AppConfig) -> Self {
+    pub fn new(config: AppConfig, keygen: Option<KeygenConfig>) -> Self {
         Self {
             config: Arc::new(RwLock::new(config)),
+            keygen: Arc::new(RwLock::new(keygen)),
             is_running: Arc::new(RwLock::new(false)),
             statistics: Arc::new(RwLock::new(Statistics::default())),
         }
@@ -51,5 +53,9 @@ impl AppState {
 
     pub fn get_statistics(&self) -> Statistics {
         self.statistics.read().clone()
+    }
+
+    pub fn keygen_config(&self) -> Option<KeygenConfig> {
+        self.keygen.read().clone()
     }
 }

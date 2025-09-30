@@ -1,10 +1,14 @@
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::easy_rdev_key::PTTKey;
+use uuid::Uuid;
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
@@ -28,9 +32,13 @@ pub struct AppConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license_plan: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub license_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub trial_expiration: Option<String>,
     #[serde(default)]
     pub trial_started: bool,
+    #[serde(default = "AppConfig::default_machine_id")]
+    pub machine_id: String,
 }
 
 impl Default for AppConfig {
@@ -48,13 +56,19 @@ impl Default for AppConfig {
             api_key: None,
             license_key: None,
             license_plan: None,
+            license_id: None,
             trial_expiration: None,
             trial_started: false,
+            machine_id: AppConfig::default_machine_id(),
         }
     }
 }
 
 impl AppConfig {
+    fn default_machine_id() -> String {
+        Uuid::new_v4().to_string()
+    }
+
     fn get_config_path() -> Result<PathBuf> {
         let proj_dirs = ProjectDirs::from("com", "desk-talk", "desk-talk")
             .context("Failed to determine project directories")?;
@@ -76,22 +90,6 @@ impl AppConfig {
 
         // Load API key from keyring
         config.api_key = Self::load_api_key().ok();
-
-        if let Ok(env_path) = Self::get_license_env_path() {
-            if env_path.exists() {
-                for (key, val) in Self::parse_env_file(&env_path)? {
-                    match key.as_str() {
-                        "KEYGEN_ACCOUNT_UID" => {
-                            config.license_plan = Some(val);
-                        }
-                        "KEYGEN_PRODUCT_ID" => {
-                            config.trial_expiration = Some(val);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
 
         Ok(config)
     }
@@ -233,7 +231,7 @@ impl AppConfig {
 }
 
 impl AppConfig {
-    fn parse_env_file(path: &PathBuf) -> Result<Vec<(String, String)>> {
+    fn parse_env_file(path: &Path) -> Result<Vec<(String, String)>> {
         let contents = fs::read_to_string(path)?;
         Ok(contents
             .lines()
@@ -258,4 +256,43 @@ impl AppConfig {
             .to_path_buf();
         Ok(exe_dir.join(".env.licenses"))
     }
+
+    pub fn load_keygen_config() -> Result<KeygenConfig> {
+        let env_path = Self::get_license_env_path()?;
+        if !env_path.exists() {
+            anyhow::bail!(".env.licenses not found at {:?}", env_path);
+        }
+        let kv = Self::parse_env_file(&env_path)?;
+        let mut lookup: HashMap<String, String> = kv.into_iter().collect();
+        Ok(KeygenConfig {
+            account_id: lookup
+                .remove("KEYGEN_ACCOUNT_UID")
+                .context("KEYGEN_ACCOUNT_UID missing in .env.licenses")?,
+            product_id: lookup
+                .remove("KEYGEN_PRODUCT_ID")
+                .context("KEYGEN_PRODUCT_ID missing in .env.licenses")?,
+            policy_trial: lookup
+                .remove("KEYGEN_POLICY_TRIAL")
+                .context("KEYGEN_POLICY_TRIAL missing in .env.licenses")?,
+            policy_pro: lookup
+                .remove("KEYGEN_POLICY_PRO")
+                .context("KEYGEN_POLICY_PRO missing in .env.licenses")?,
+            admin_token: lookup
+                .remove("KEYGEN_ADMIN_TOKEN")
+                .context("KEYGEN_ADMIN_TOKEN missing in .env.licenses")?,
+            public_key_hex: lookup
+                .remove("KEYGEN_PUBLIC_KEY")
+                .context("KEYGEN_PUBLIC_KEY missing in .env.licenses")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeygenConfig {
+    pub account_id: String,
+    pub product_id: String,
+    pub policy_trial: String,
+    pub policy_pro: String,
+    pub admin_token: String,
+    pub public_key_hex: String,
 }

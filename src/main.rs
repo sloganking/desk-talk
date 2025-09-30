@@ -174,7 +174,8 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
 fn main() {
     // Load configuration
     let config = AppConfig::load().unwrap_or_default();
-    let app_state = AppState::new(config);
+    let keygen_config = AppConfig::load_keygen_config().ok();
+    let app_state = AppState::new(config, keygen_config);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
