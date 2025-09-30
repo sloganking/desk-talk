@@ -41,12 +41,6 @@
         "label": "settings",
         "center": true
       }
-    ],
-    "trayIcon": {
-      "id": "main",
-      "iconPath": "icons/icon.png",
-      "tooltip": "DeskTalk",
-      "menuOnLeftClick": false
-    }
+    ]
   }
 }

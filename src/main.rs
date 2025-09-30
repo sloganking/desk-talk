@@ -207,12 +207,16 @@ fn main() {
 
             // Create tray menu
             let menu = create_tray_menu(&handle)?;
+            let icon = app.default_window_icon().cloned();
 
-            // Build tray icon
-            let _tray = TrayIconBuilder::with_id("main")
+            let mut builder = TrayIconBuilder::with_id("main")
                 .menu(&menu)
-                .tooltip("DeskTalk")
-                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("DeskTalk");
+            if let Some(icon) = icon {
+                builder = builder.icon(icon);
+            }
+
+            let _tray = builder
                 .on_tray_icon_event(move |_tray, event| {
                     handle_tray_event(&handle_for_tray, event);
                 })
