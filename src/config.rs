@@ -19,9 +19,18 @@ pub struct AppConfig {
     pub cap_first: bool,
     pub space: bool,
     pub type_chars: bool,
+    #[serde(default)]
     pub auto_start: bool,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub api_key: Option<String>, // Stored securely in keyring/.env, not committed to config file
+    #[serde(skip_serializing, default)]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license_plan: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trial_expiration: Option<String>,
+    #[serde(default)]
+    pub trial_started: bool,
 }
 
 impl Default for AppConfig {
@@ -37,6 +46,10 @@ impl Default for AppConfig {
             type_chars: false,
             auto_start: false,
             api_key: None,
+            license_key: None,
+            license_plan: None,
+            trial_expiration: None,
+            trial_started: false,
         }
     }
 }

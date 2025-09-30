@@ -182,14 +182,6 @@ fn main() {
         .manage(AppEngine {
             engine: Arc::new(Mutex::new(None)),
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "settings" {
-                    window.hide().ok();
-                    api.prevent_close();
-                }
-            }
-        })
         .invoke_handler(tauri::generate_handler![
             tauri_commands::get_config,
             tauri_commands::save_config,
@@ -228,6 +220,16 @@ fn main() {
                     handle_tray_event(&handle_for_tray, event);
                 })
                 .build(app)?;
+
+            if let Some(window) = app.get_webview_window("settings") {
+                let window_handle = window.clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window_handle.hide();
+                    }
+                });
+            }
 
             // Attempt to auto-start transcription if configuration is ready
             auto_start_if_possible(&handle_for_auto_start);
