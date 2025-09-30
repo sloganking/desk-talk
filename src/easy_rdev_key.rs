@@ -1,7 +1,7 @@
 /// This is a copy of rdev::Key, so that #[derive(clap::ValueEnum)] works.
 ///
 /// I also added F13 through F24 for convenience.
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub enum PTTKey {
     /// Alt key on Linux and Windows (option key on macOS)
     Alt,

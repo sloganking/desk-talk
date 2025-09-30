@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeskTalk Settings</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎤 DeskTalk Settings</h1>
+            <p class="subtitle">Configure your voice transcription assistant</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="general">General</button>
+            <button class="tab-button" data-tab="transcription">Transcription</button>
+            <button class="tab-button" data-tab="stats">Statistics</button>
+            <button class="tab-button" data-tab="license">License</button>
+        </div>
+
+        <!-- General Tab -->
+        <div class="tab-content active" id="general">
+            <div class="section">
+                <h2>Push-to-Talk Key</h2>
+                <select id="pttKey">
+                    <option value="">Select a key...</option>
+                </select>
+                <!-- <button id="detectKeyBtn" class="btn btn-secondary">Detect Key Press</button> -->
+                <p class="hint">Select your push-to-talk key from the dropdown above</p>
+            </div>
+
+            <div class="section">
+                <h2>Audio Device</h2>
+                <select id="audioDevice">
+                    <option value="default">Default Device</option>
+                </select>
+                <button id="refreshDevicesBtn" class="btn btn-secondary">Refresh</button>
+            </div>
+
+            <div class="section">
+                <h2>Options</h2>
+                <label class="checkbox">
+                    <input type="checkbox" id="capFirst">
+                    <span>Capitalize first letter</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="space">
+                    <span>Add space after transcription</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="typeChars">
+                    <span>Type characters instead of pasting</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="autoStart">
+                    <span>Start with Windows</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Transcription Tab -->
+        <div class="tab-content" id="transcription">
+            <div class="section">
+                <h2>Transcription Mode</h2>
+                <label class="radio">
+                    <input type="radio" name="transcriptionMode" value="openai" id="modeOpenAI" checked>
+                    <span>OpenAI API (Cloud)</span>
+                </label>
+                <label class="radio">
+                    <input type="radio" name="transcriptionMode" value="local" id="modeLocal">
+                    <span>Local Model (Offline)</span>
+                </label>
+            </div>
+
+            <div class="section" id="openaiSection">
+                <h2>OpenAI API Key</h2>
+                <input type="password" id="apiKey" placeholder="sk-...">
+                <button id="validateKeyBtn" class="btn btn-secondary">Validate</button>
+                <p class="hint">Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI</a></p>
+            </div>
+
+            <div class="section" id="localSection" style="display: none;">
+                <h2>Local Model</h2>
+                <select id="localModel">
+                    <option value="">Select a model...</option>
+                    <option value="tiny-en">Tiny (English) - Fastest</option>
+                    <option value="tiny">Tiny (Multilingual)</option>
+                    <option value="base-en">Base (English)</option>
+                    <option value="base">Base (Multilingual)</option>
+                    <option value="small-en">Small (English)</option>
+                    <option value="small">Small (Multilingual)</option>
+                    <option value="medium-en">Medium (English)</option>
+                    <option value="medium">Medium (Multilingual)</option>
+                    <option value="large-v3">Large V3 - Best Quality</option>
+                </select>
+                <p class="hint">Models will be downloaded on first use</p>
+            </div>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div class="tab-content" id="stats">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalWords">0</div>
+                    <div class="stat-label">Total Words</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avgWPM">0</div>
+                    <div class="stat-label">Average WPM</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalTime">0m</div>
+                    <div class="stat-label">Recording Time</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="sessionCount">0</div>
+                    <div class="stat-label">Sessions</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- License Tab -->
+        <div class="tab-content" id="license">
+            <div class="section">
+                <h2>License Status</h2>
+                <div class="license-status">
+                    <p><strong>Status:</strong> <span id="licenseStatus">Trial Mode (7 days remaining)</span></p>
+                    <p><strong>Plan:</strong> <span id="licensePlan">Trial</span></p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Activate License</h2>
+                <input type="text" id="licenseKey" placeholder="Enter your license key">
+                <button id="activateLicenseBtn" class="btn btn-primary">Activate</button>
+            </div>
+
+            <div class="section">
+                <button id="buyLicenseBtn" class="btn btn-success">Buy License</button>
+            </div>
+        </div>
+
+        <footer>
+            <button id="saveBtn" class="btn btn-primary">Save Settings</button>
+            <button id="startBtn" class="btn btn-success">Start Transcription</button>
+            <button id="stopBtn" class="btn btn-danger" style="display: none;">Stop Transcription</button>
+            <div class="status" id="status"></div>
+        </footer>
+    </div>
+
+    <script type="module">
+        // Test if Tauri is available
+        if (window.__TAURI_INTERNALS__) {
+            console.log('Tauri API loaded successfully');
+        } else if (window.__TAURI__) {
+            console.log('Tauri API loaded (legacy)');
+        } else {
+            console.error('Tauri API not available!');
+        }
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,488 +1,228 @@
-use anyhow::Context;
-use async_openai::Client;
-use dotenvy::dotenv;
-use enigo::{Enigo, KeyboardControllable};
-use std::env;
-use tempfile::tempdir;
-mod transcribe;
-use std::thread::{self, sleep};
-use transcribe::trans;
-mod record;
-use clap::{Parser, Subcommand, ValueEnum};
-use clipboard::ClipboardContext;
-use clipboard::ClipboardProvider;
-use cpal::traits::{DeviceTrait, HostTrait};
-use default_device_sink::DefaultDeviceSink;
-use rdev::{listen, Event};
-use record::rec;
-use rodio::source::{SineWave, Source};
-use rodio::Decoder;
-use std::collections::VecDeque;
-use std::error::Error;
-use std::io::{BufReader, Cursor};
-use std::sync::mpsc;
-use std::time::Duration;
+// Prevents additional console window on Windows in release mode
+// TEMPORARILY DISABLED FOR DEBUGGING
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod app_state;
+mod config;
 mod easy_rdev_key;
-use crate::easy_rdev_key::PTTKey;
-use mutter::ModelType;
+mod record;
+mod tauri_commands;
+mod transcribe;
+mod transcription_engine;
 
-#[derive(Parser, Debug)]
-#[command(version)]
-struct Opt {
-    /// The audio device to use for recording. Leaving this blank will use the default device.
-    #[arg(short, long, default_value_t = String::from("default"))]
-    device: String,
+use app_state::AppState;
+use config::AppConfig;
+use parking_lot::Mutex;
+use std::sync::Arc;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, Runtime, State,
+};
+use transcription_engine::TranscriptionEngine;
 
-    /// Your OpenAI API key
-    #[arg(short, long)]
-    api_key: Option<String>,
-
-    /// The push to talk key
-    #[arg(short, long)]
-    ptt_key: Option<PTTKey>,
-
-    /// Use local whisper model instead of OpenAI API
-    #[arg(long)]
-    local: bool,
-
-    /// The local whisper model to use. Requires --local.
-    #[arg(long, value_enum, requires = "local")]
-    model: Option<LocalModel>,
-
-    /// Ensures the first letter of the transcription is capitalized.
-    #[arg(short, long)]
-    cap_first: bool,
-
-    /// Ensures the transcription ends with a space character. This lets you transcribe repeatedly without typing a space character between transcriptions to separate the words.
-    ///
-    /// This is a flag and not default behavior because in some natural languages it doesn't make sense to put a space after the transcription.
-    #[arg(short, long)]
-    space: bool,
-
-    /// Passing this flag will emulate the keyboard for typing the characters, instead of pressing Ctrl-V and pasting the text, which is the default behavior.
-    /// This may be needed to pass text to a terminal, which would not accept pasting or something else.
-    #[arg(short, long)]
-    type_chars: bool,
-
-    /// The push to talk key.
-    /// Use this if you want to use a key that is not supported by the PTTKey enum.
-    #[arg(short, long, conflicts_with("ptt_key"))]
-    special_ptt_key: Option<u32>,
-
-    #[clap(subcommand)]
-    pub subcommands: Option<SubCommands>,
+struct AppEngine {
+    engine: Arc<Mutex<Option<TranscriptionEngine>>>,
 }
 
-#[derive(Debug, Subcommand)]
-pub enum SubCommands {
-    /// Displays keys as you press them so you can figure out what key to use for push to talk.
-    ShowKeyPresses,
-    /// Lists the audio input devices on your system.
-    ListDevices,
-}
+fn auto_start_if_possible<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    let config = state.config.read().clone();
 
-#[derive(ValueEnum, Clone, Debug, Copy)]
-pub enum LocalModel {
-    TinyEn,
-    Tiny,
-    BaseEn,
-    Base,
-    SmallEn,
-    Small,
-    MediumEn,
-    Medium,
-    LargeV1,
-    LargeV2,
-    LargeV3,
-}
-
-impl From<LocalModel> for ModelType {
-    fn from(model: LocalModel) -> Self {
-        match model {
-            LocalModel::TinyEn => ModelType::TinyEn,
-            LocalModel::Tiny => ModelType::Tiny,
-            LocalModel::BaseEn => ModelType::BaseEn,
-            LocalModel::Base => ModelType::Base,
-            LocalModel::SmallEn => ModelType::SmallEn,
-            LocalModel::Small => ModelType::Small,
-            LocalModel::MediumEn => ModelType::MediumEn,
-            LocalModel::Medium => ModelType::Medium,
-            LocalModel::LargeV1 => ModelType::LargeV1,
-            LocalModel::LargeV2 => ModelType::LargeV2,
-            LocalModel::LargeV3 => ModelType::LargeV3,
-        }
+    if config.get_ptt_key().is_none() {
+        println!("Auto-start skipped: no PTT key configured");
+        return;
     }
-}
 
-fn capitalize_first_letter(s: &mut String) {
-    let mut c = s.chars();
-    if let Some(f) = c.next() {
-        let uppercase: String = f.to_uppercase().collect();
-        let first_char_len = f.len_utf8();
-        s.replace_range(0..first_char_len, &uppercase);
+    if !config.use_local && config.api_key.is_none() {
+        println!("Auto-start skipped: no OpenAI API key configured");
+        return;
     }
-}
 
-fn truncate_to_secs(d: Duration) -> Duration {
-    Duration::from_secs(d.as_secs())
-}
+    if config.use_local && config.local_model.is_none() {
+        println!("Auto-start skipped: no local model selected");
+        return;
+    }
 
-// Using humantime for human-readable durations
+    let engine_state = app.state::<AppEngine>();
+    if engine_state.engine.lock().is_some() {
+        println!("Auto-start skipped: engine already running");
+        return;
+    }
 
-static TICK_BYTES: &[u8] = include_bytes!("../assets/tick.mp3");
-static FAILED_BYTES: &[u8] = include_bytes!("../assets/failed.mp3");
-
-fn tick_loop(stop_rx: mpsc::Receiver<()>) {
-    let tick_sink = DefaultDeviceSink::new();
-    loop {
-        if stop_rx.try_recv().is_ok() {
-            tick_sink.stop();
-            break;
-        }
-        if tick_sink.empty() {
-            let cursor = Cursor::new(TICK_BYTES);
-            if let Ok(decoder) = Decoder::new(BufReader::new(cursor)) {
-                tick_sink.stop();
-                tick_sink.append(decoder);
-            } else {
-                tick_sink.stop();
-                tick_sink.append(
-                    SineWave::new(880.0)
-                        .take_duration(Duration::from_millis(50))
-                        .amplify(0.20),
-                );
+    println!("Auto-starting transcription engine...");
+    let engine = TranscriptionEngine::new(state.inner().clone());
+    match engine.start() {
+        Ok(_) => {
+            println!("Auto-start successful");
+            *engine_state.engine.lock() = Some(engine);
+            if let Some(tray) = app.tray_by_id("main") {
+                let _ = tray.set_tooltip(Some("DeskTalk - Running"));
             }
         }
-        std::thread::sleep(Duration::from_millis(100));
+        Err(err) => {
+            println!("Auto-start failed: {}", err);
+        }
     }
 }
 
-fn play_failure_sound() {
-    let sink = DefaultDeviceSink::new();
-    if let Ok(decoder) = Decoder::new(BufReader::new(Cursor::new(FAILED_BYTES))) {
-        sink.append(decoder);
-    } else {
-        sink.append(
-            SineWave::new(440.0)
-                .take_duration(Duration::from_millis(150))
-                .amplify(0.20),
-        );
+#[tauri::command]
+fn start_engine<R: Runtime>(
+    app_handle: AppHandle<R>,
+    state: State<AppState>,
+    engine_state: State<AppEngine>,
+) -> Result<(), String> {
+    if engine_state.engine.lock().is_some() {
+        println!("Engine already running");
+        return Ok(());
     }
-    sink.sleep_until_end();
-}
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let opt = Opt::parse();
-    let _ = dotenv();
+    println!("Starting transcription engine...");
 
-    let mut clipboard: ClipboardContext = ClipboardProvider::new().unwrap();
+    // Debug: print config
+    let config = state.config.read();
+    println!("Config - PTT Key: {:?}", config.ptt_key);
+    println!("Config - Device: {}", config.device);
+    println!("Config - Use Local: {}", config.use_local);
+    println!("Config - Has API Key: {}", config.api_key.is_some());
+    drop(config);
 
-    match opt.subcommands {
-        Some(subcommand) => {
-            match subcommand {
-                SubCommands::ShowKeyPresses => {
-                    println!("Press keys to see their codes. Press Ctrl+C to exit. Once you've figured out what key you want to use for push to talk, pass it to desk-talk using the --ptt-key argument. Or pass the number to the --special-ptt-key argument if the key is Unknown(number).");
+    let engine = TranscriptionEngine::new(state.inner().clone());
 
-                    fn show_keys_callback(event: Event) {
-                        if let rdev::EventType::KeyPress(key) = event.event_type {
-                            println!("Key pressed: {:?}", key);
-                        }
-                    }
+    match engine.start() {
+        Ok(_) => {
+            println!("Transcription engine started successfully!");
+            *engine_state.engine.lock() = Some(engine);
 
-                    // This will block.
-                    if let Err(error) = listen(show_keys_callback) {
-                        println!("Error: {:?}", error)
-                    }
-                }
-                SubCommands::ListDevices => {
-                    let host = cpal::default_host();
-
-                    let test = host.default_output_device().unwrap();
-
-                    println!("default output_device: {:?}", test.name());
-                    // Set up the input device and stream with the default input config.
-                    host.default_input_device();
-                    let devices = host
-                        .input_devices()
-                        .context("Failed to get list of input devices")?;
-
-                    for device in devices {
-                        let device_name = match device.name() {
-                            Ok(name) => name,
-                            Err(err) => {
-                                println!("Error: Failed to get device name: {:?}", err);
-                                continue;
-                            }
-                        };
-                        println!("{:?}", device_name);
-                    }
-
-                    // devices
-                    //     .filter_map(|device| device.name().ok())
-                    //     .for_each(|device_name| println!("{:?}", device_name));
-                }
+            // Update tray icon to show running state
+            if let Some(tray) = app_handle.tray_by_id("main") {
+                let _ = tray.set_tooltip(Some("DeskTalk - Running"));
             }
 
             Ok(())
         }
-        // Run transcription
-        None => {
-            // figure out ptt key
-            let ptt_key = match opt.ptt_key {
-                Some(ptt_key) => ptt_key.into(),
-                None => match opt.special_ptt_key {
-                    Some(special_ptt_key) => rdev::Key::Unknown(special_ptt_key),
-                    None => {
-                        println!("No push to talk key specified. Please pass a key using the --ptt-key argument or the --special-ptt-key argument.");
-                        return Ok(());
-                    }
-                },
-            };
-
-            if !opt.local {
-                if let Some(api_key) = opt.api_key {
-                    env::set_var("OPENAI_API_KEY", api_key);
-                }
-
-                if env::var("OPENAI_API_KEY").is_err() {
-                    println!("OPENAI_API_KEY not set. Please pass your API key as an argument or assign is to the 'OPENAI_API_KEY' env var using terminal or .env file.");
-                    return Ok(());
-                }
-            } else if opt.model.is_none() {
-                println!("--model must be specified when using --local");
-                return Ok(());
-            }
-
-            let (tx, rx): (flume::Sender<Event>, flume::Receiver<Event>) = flume::unbounded();
-
-            // create key handler thread
-            thread::spawn(move || {
-                let mut recorder = rec::Recorder::new();
-                let client = Client::new();
-                let runtime = tokio::runtime::Runtime::new()
-                    .context("Failed to create tokio runtime")
-                    .unwrap();
-                let mut enigo = Enigo::new();
-
-                // Track rolling average of WPM
-                let mut wpm_history: VecDeque<f64> = VecDeque::new();
-                let mut wpm_sum: f64 = 0.0;
-                const WPM_ROLLING_MAX: usize = 1000;
-                let mut total_words_transcribed: usize = 0;
-                let mut total_recording_duration: Duration = Duration::from_secs(0);
-
-                let tmp_dir = tempdir().unwrap();
-                // println!("{:?}", tmp_dir.path());
-                let voice_tmp_path = tmp_dir.path().join("voice_tmp.wav");
-
-                let mut recording_start = std::time::SystemTime::now();
-                let mut key_pressed = false;
-                let key_to_check = ptt_key;
-
-                for event in rx.iter() {
-                    // println!("Received: {:?}", event);
-                    match event.event_type {
-                        rdev::EventType::KeyPress(key) => {
-                            if key == key_to_check && !key_pressed {
-                                key_pressed = true;
-                                // handle key press
-                                recording_start = std::time::SystemTime::now();
-                                match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
-                                    Ok(_) => (),
-                                    Err(err) => {
-                                        println!("Error: Failed to start recording: {:?}", err)
-                                    }
-                                }
-                            }
-                        }
-                        rdev::EventType::KeyRelease(key) => {
-                            if key == key_to_check && key_pressed {
-                                key_pressed = false;
-                                // handle key release
-
-                                // get elapsed time since recording started
-                                let elapsed = match recording_start.elapsed() {
-                                    Ok(elapsed) => elapsed,
-                                    Err(err) => {
-                                        println!("Error: Failed to get elapsed recording time. Skipping transcription: \n\n{}",err);
-                                        continue;
-                                    }
-                                };
-                                match recorder.stop_recording() {
-                                    Ok(_) => (),
-                                    Err(err) => {
-                                        println!("Error: Failed to stop recording: {:?}", err);
-                                        continue;
-                                    }
-                                }
-
-                                // future::timeout(
-                                //     Duration::from_secs(10),
-                                //     trans::transcribe(&client, &voice_tmp_path),
-                                // )
-                                // .await;
-
-                                // Whisper API can't handle less than 0.1 seconds of audio.
-                                // So we'll only transcribe if the recording is longer than 0.2 seconds.
-                                if elapsed.as_secs_f32() > 0.2 {
-                                    let (tick_tx, tick_rx) = mpsc::channel();
-                                    let tick_handle = thread::spawn(move || tick_loop(tick_rx));
-
-                                    let transcription_result = if opt.local {
-                                        let model = opt
-                                            .model
-                                            .expect("--model required when --local is used");
-                                        trans::transcribe_local(&voice_tmp_path, model.into())
-                                    } else {
-                                        runtime.block_on(trans::transcribe_with_retry(
-                                            &client,
-                                            &voice_tmp_path,
-                                            3,
-                                        ))
-                                    };
-
-                                    let _ = tick_tx.send(());
-                                    let _ = tick_handle.join();
-
-                                    let mut transcription = match transcription_result {
-                                        Ok(transcription) => transcription,
-                                        Err(err) => {
-                                            println!(
-                                                "Error: Failed to transcribe audio: {:?}",
-                                                err
-                                            );
-                                            play_failure_sound();
-                                            continue;
-                                        }
-                                    };
-
-                                    // Transctiption post processing
-                                    {
-                                        if opt.cap_first {
-                                            capitalize_first_letter(&mut transcription);
-                                        }
-
-                                        if opt.space {
-                                            if let Some(last_char) = transcription.chars().last() {
-                                                if last_char != ' ' {
-                                                    transcription.push(' ');
-                                                }
-                                            }
-                                        }
-
-                                        // Remove ellipses.
-                                        transcription = transcription.replace("...", "");
-                                    }
-
-                                    if transcription.is_empty() {
-                                        println!("No transcription");
-                                        play_failure_sound();
-                                        continue;
-                                    }
-
-                                    let word_count = transcription.split_whitespace().count();
-                                    let duration_secs = elapsed.as_secs_f64();
-                                    if opt.type_chars {
-                                        enigo.key_sequence(&transcription);
-                                    } else {
-                                        // paste from clipboard
-
-                                        // get the clipboard contents so we can restore it later
-                                        let clip_tmp_result = clipboard.get_contents();
-
-                                        // Set and paste Clipboard Contents
-                                        match clipboard.set_contents(transcription) {
-                                            Ok(_) => {
-                                                enigo.key_sequence_parse("{+CTRL}");
-                                                sleep(Duration::from_millis(100));
-                                                enigo.key_sequence_parse("v");
-                                                sleep(Duration::from_millis(100));
-                                                enigo.key_sequence_parse("{-CTRL}");
-                                                sleep(Duration::from_millis(100));
-
-                                                // restore the clipboard contents
-                                                if let Ok(clip_tmp) = clip_tmp_result {
-                                                    if let Err(err) =
-                                                        clipboard.set_contents(clip_tmp)
-                                                    {
-                                                        println!(
-                                                        "Error restoring clipboard contents: {}",
-                                                        err
-                                                    );
-                                                    }
-                                                }
-                                            }
-                                            Err(err) => {
-                                                println!(
-                                                    "Error: Failed to set clipboard contents: {:?}",
-                                                    err
-                                                );
-                                                continue;
-                                            }
-                                        }
-                                    }
-                                    if duration_secs > 0.0 {
-                                        let wpm = (word_count as f64) * 60.0 / duration_secs;
-                                        // Update rolling average
-                                        wpm_history.push_back(wpm);
-                                        wpm_sum += wpm;
-                                        if wpm_history.len() > WPM_ROLLING_MAX {
-                                            if let Some(removed) = wpm_history.pop_front() {
-                                                wpm_sum -= removed;
-                                            }
-                                        }
-                                        let avg_wpm = if !wpm_history.is_empty() {
-                                            wpm_sum / (wpm_history.len() as f64)
-                                        } else {
-                                            0.0
-                                        };
-                                        // Update cumulative totals and print summary
-                                        total_words_transcribed += word_count;
-                                        total_recording_duration += elapsed;
-                                        println!(
-                                            "WPM: {:.1} ({} words over {}) | Avg: {:.1} | Total: {} words, {}",
-                                            wpm,
-                                            word_count,
-                                            humantime::format_duration(truncate_to_secs(elapsed)),
-                                            avg_wpm,
-                                            total_words_transcribed,
-                                            humantime::format_duration(truncate_to_secs(total_recording_duration))
-                                        );
-                                    }
-                                } else {
-                                    println!("Recording too short");
-                                }
-                            }
-                        }
-                        _ => (),
-                    }
-                }
-            });
-
-            // Have this main thread recieve events and send them to the key handler thread
-            {
-                let callback = move |event: Event| {
-                    tx.send(event).unwrap();
-                };
-
-                // This will block.
-                if let Err(error) = listen(callback) {
-                    println!("Error: {:?}", error)
-                }
-            }
-
-            Ok(())
+        Err(e) => {
+            println!("Failed to start engine: {}", e);
+            Err(e.to_string())
         }
     }
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn capitalize_first_letter_works() {
-        let mut s = String::from("hello");
-        capitalize_first_letter(&mut s);
-        assert_eq!(s, "Hello");
+#[tauri::command]
+fn stop_engine<R: Runtime>(
+    app_handle: AppHandle<R>,
+    engine_state: State<AppEngine>,
+) -> Result<(), String> {
+    if let Some(engine) = engine_state.engine.lock().take() {
+        engine.stop();
     }
+
+    // Update tray icon to show stopped state
+    if let Some(tray) = app_handle.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some("DeskTalk - Stopped"));
+    }
+
+    Ok(())
+}
+
+fn create_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let open_settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let start_item = MenuItem::with_id(app, "start", "Start Transcription", true, None::<&str>)?;
+    let stop_item = MenuItem::with_id(app, "stop", "Stop Transcription", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+
+    Menu::with_items(app, &[&open_settings, &start_item, &stop_item, &quit_item])
+}
+
+fn handle_tray_event<R: Runtime>(app: &AppHandle<R>, event: TrayIconEvent) {
+    if let TrayIconEvent::Click {
+        button: MouseButton::Left,
+        button_state: MouseButtonState::Up,
+        ..
+    } = event
+    {
+        if let Some(window) = app.get_webview_window("settings") {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
+    match id {
+        "settings" => {
+            if let Some(window) = app.get_webview_window("settings") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+        "start" => {
+            let state = app.state::<AppState>();
+            let engine_state = app.state::<AppEngine>();
+            let _ = start_engine(app.clone(), state, engine_state);
+        }
+        "stop" => {
+            let engine_state = app.state::<AppEngine>();
+            let _ = stop_engine(app.clone(), engine_state);
+        }
+        "quit" => {
+            app.exit(0);
+        }
+        _ => {}
+    }
+}
+
+fn main() {
+    // Load configuration
+    let config = AppConfig::load().unwrap_or_default();
+    let app_state = AppState::new(config);
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .manage(app_state)
+        .manage(AppEngine {
+            engine: Arc::new(Mutex::new(None)),
+        })
+        .invoke_handler(tauri::generate_handler![
+            tauri_commands::get_config,
+            tauri_commands::save_config,
+            tauri_commands::get_statistics,
+            tauri_commands::get_audio_devices,
+            tauri_commands::get_available_ptt_keys,
+            tauri_commands::start_transcription,
+            tauri_commands::stop_transcription,
+            tauri_commands::is_running,
+            tauri_commands::validate_api_key,
+            tauri_commands::detect_key_press,
+            start_engine,
+            stop_engine,
+        ])
+        .on_menu_event(|app, event| {
+            handle_menu_event(app, event.id().as_ref());
+        })
+        .setup(|app| {
+            let handle = app.handle().clone();
+            let handle_for_tray = app.handle().clone();
+            let handle_for_auto_start = app.handle().clone();
+
+            // Create tray menu
+            let menu = create_tray_menu(&handle)?;
+
+            // Build tray icon
+            let _tray = TrayIconBuilder::with_id("main")
+                .menu(&menu)
+                .tooltip("DeskTalk")
+                .icon(app.default_window_icon().unwrap().clone())
+                .on_tray_icon_event(move |_tray, event| {
+                    handle_tray_event(&handle_for_tray, event);
+                })
+                .build(app)?;
+
+            // Attempt to auto-start transcription if configuration is ready
+            auto_start_if_possible(&handle_for_auto_start);
+
+            Ok(())
+        })
+        .run(tauri::generate_context!("tauri.conf.json"))
+        .expect("error while running tauri application");
 }
