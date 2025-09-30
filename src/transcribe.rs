@@ -12,6 +12,7 @@ pub mod trans {
         path::{Path, PathBuf},
         process::Command,
     };
+
     use tempfile::tempdir;
     use ureq;
 
@@ -23,7 +24,16 @@ pub mod trans {
         output.set_extension("mp3");
 
         // `ffmpeg -i input.mp4 -q:a 0 -map a output.mp3`
-        let _ = match Command::new("ffmpeg")
+        let mut cmd = Command::new("ffmpeg");
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let _ = match cmd
             .args([
                 "-i",
                 input
