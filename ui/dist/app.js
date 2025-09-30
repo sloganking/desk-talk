@@ -7,6 +7,42 @@ if (!invoke) {
 }
 
 let cachedApiKey = '';
+let currentPttKey = null;
+
+function applyPttKeySelection() {
+    if (!currentPttKey) {
+        return;
+    }
+    const select = document.getElementById('pttKey');
+    if (!select) {
+        return;
+    }
+    const optionExists = Array.from(select.options).some(
+        (option) => option.value === currentPttKey
+    );
+    if (!optionExists) {
+        const option = document.createElement('option');
+        option.value = currentPttKey;
+        option.textContent = currentPttKey;
+        select.appendChild(option);
+    }
+    select.value = currentPttKey;
+}
+
+function updateEngineButtons(isRunning) {
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    if (!startBtn || !stopBtn) {
+        return;
+    }
+    if (isRunning) {
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'inline-block';
+    } else {
+        startBtn.style.display = 'inline-block';
+        stopBtn.style.display = 'none';
+    }
+}
 
 // Tab switching
 document.querySelectorAll('.tab-button').forEach(button => {
@@ -45,15 +81,8 @@ async function loadConfig() {
         
         // General settings
         if (config.ptt_key) {
-            const select = document.getElementById('pttKey');
-            const optionExists = Array.from(select.options).some(option => option.value === config.ptt_key);
-            if (!optionExists) {
-                const option = document.createElement('option');
-                option.value = config.ptt_key;
-                option.textContent = config.ptt_key;
-                select.appendChild(option);
-            }
-            select.value = config.ptt_key;
+            currentPttKey = config.ptt_key;
+            applyPttKeySelection();
         }
         document.getElementById('audioDevice').value = config.device || 'default';
         document.getElementById('capFirst').checked = config.cap_first || false;
@@ -72,6 +101,9 @@ async function loadConfig() {
             cachedApiKey = config.api_key;
             document.getElementById('apiKey').value = config.api_key;
         }
+
+        const running = await invoke('is_running');
+        updateEngineButtons(running);
         if (config.local_model) {
             document.getElementById('localModel').value = config.local_model;
         }
@@ -95,6 +127,7 @@ async function loadPTTKeys() {
             option.textContent = key;
             select.appendChild(option);
         });
+        applyPttKeySelection();
     } catch (error) {
         console.error('Error loading PTT keys:', error);
     }
@@ -165,7 +198,7 @@ async function saveConfig() {
             return false;
         }
         
-        const config = {
+    const config = {
             ptt_key: pttKeyValue,
             special_ptt_key: null,
             device: document.getElementById('audioDevice').value,
@@ -316,8 +349,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { passive: true });
     }
 
-    loadConfig();
-    loadPTTKeys();
-    loadAudioDevices();
-    console.log('Initialization complete');
+    (async () => {
+        await loadPTTKeys();
+        await loadConfig();
+        await loadAudioDevices();
+        console.log('Initialization complete');
+    })();
 });
