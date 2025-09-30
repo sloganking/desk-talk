@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime, State,
+    AppHandle, Manager, Runtime, State, WindowEvent,
 };
 use transcription_engine::TranscriptionEngine;
 
@@ -182,6 +182,14 @@ fn main() {
         .manage(app_state)
         .manage(AppEngine {
             engine: Arc::new(Mutex::new(None)),
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "settings" {
+                    window.hide().ok();
+                    api.prevent_close();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             tauri_commands::get_config,
