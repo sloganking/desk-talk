@@ -563,6 +563,26 @@ document.getElementById('viewUsageBtn').addEventListener('click', async () => {
     }
 });
 
+document.getElementById('openaiApiKeysLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+        await invoke('open_url', { url: 'https://platform.openai.com/api-keys' });
+    } catch (error) {
+        console.error('Failed to open URL:', error);
+        showStatus('Failed to open browser: ' + error, 'error');
+    }
+});
+
+document.getElementById('apiKeyVideoLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+        await invoke('open_url', { url: 'https://youtu.be/SzPE_AE0eEo?si=WbJP-ABj0uG5s-XV' });
+    } catch (error) {
+        console.error('Failed to open URL:', error);
+        showStatus('Failed to open browser: ' + error, 'error');
+    }
+});
+
 document.getElementById('deactivateLicenseBtn').addEventListener('click', async () => {
     if (!confirm('Are you sure you want to deactivate this license from this device?')) {
         return;
