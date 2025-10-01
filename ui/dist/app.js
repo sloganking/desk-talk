@@ -244,10 +244,39 @@ async function saveConfig() {
     try {
         const pttKeyValue = document.getElementById('pttKey').value;
         
-        // Validate required fields
+        // If PTT key is cleared/unset, stop the engine
         if (!pttKeyValue) {
-            showStatus('Please select a PTT key first!', 'error');
-            return false;
+            const wasRunning = await invoke('is_running');
+            if (wasRunning) {
+                await invoke('stop_engine');
+                await updateEngineStatus(false);
+            }
+            
+            // Still save the config with empty PTT key
+            const config = {
+                ptt_key: null,
+                special_ptt_key: null,
+                device: document.getElementById('audioDevice').value,
+                use_local: document.getElementById('modeLocal').checked,
+                local_model: document.getElementById('localModel').value || null,
+                cap_first: document.getElementById('capFirst').checked,
+                space: document.getElementById('space').checked,
+                type_chars: document.getElementById('typeChars').checked,
+                auto_start: document.getElementById('autoStart').checked,
+                start_minimized: document.getElementById('startMinimized').checked,
+                api_key: document.getElementById('apiKey').value || cachedApiKey || null,
+                license_key: null,
+                license_plan: null,
+                license_id: null,
+                trial_expiration: null,
+                trial_started: false,
+                machine_id: "",
+            };
+            
+            await invoke('save_config', { incoming: config });
+            await updateEngineStatus(false, 'No push-to-talk key configured. Select a key in General settings.');
+            showStatus('PTT key cleared and engine stopped.', 'success');
+            return true;
         }
         
         const isLocal = document.getElementById('modeLocal').checked;
