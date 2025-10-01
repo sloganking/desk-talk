@@ -38,23 +38,63 @@ function applyPttKeySelection() {
     select.value = currentPttKey;
 }
 
-function updateEngineButtons(isRunning) {
-    const buttons = [
-        { start: document.getElementById('startBtn'), stop: document.getElementById('stopBtn') },
-        { start: document.getElementById('startBtn2'), stop: document.getElementById('stopBtn2') }
-    ];
+async function updateEngineStatus(isRunning, errorMessage = null) {
+    const statusEl = document.getElementById('engineStatus');
+    const errorEl = document.getElementById('engineError');
+    if (!statusEl) return;
     
-    buttons.forEach(btnSet => {
-        if (btnSet.start && btnSet.stop) {
-            if (isRunning) {
-                btnSet.start.style.display = 'none';
-                btnSet.stop.style.display = 'inline-block';
-            } else {
-                btnSet.start.style.display = 'inline-block';
-                btnSet.stop.style.display = 'none';
-            }
+    if (isRunning) {
+        statusEl.textContent = 'Running';
+        statusEl.className = 'status-badge active';
+        if (errorEl) {
+            errorEl.style.display = 'none';
+            errorEl.textContent = '';
         }
-    });
+    } else {
+        statusEl.textContent = 'Stopped';
+        statusEl.className = 'status-badge inactive';
+        
+        // Check why it's stopped and show appropriate error
+        if (!errorMessage) {
+            errorMessage = await getEngineStopReason();
+        }
+        
+        if (errorEl && errorMessage) {
+            errorEl.textContent = `⚠️ ${errorMessage} ⚠️`;
+            errorEl.style.display = 'block';
+        }
+    }
+}
+
+async function getEngineStopReason() {
+    try {
+        const config = await invoke('get_config');
+        
+        // Check license first
+        if (!config.license_key) {
+            return 'No active license. Please activate a license to use DeskTalk.';
+        }
+        
+        // Check PTT key
+        if (!config.ptt_key) {
+            return 'No push-to-talk key configured. Select a key in General settings.';
+        }
+        
+        // Check API key for OpenAI mode
+        if (!config.use_local && !config.api_key) {
+            return 'No OpenAI API key configured. Enter your API key in Transcription settings.';
+        }
+        
+        // Check local model for local mode
+        if (config.use_local && !config.local_model) {
+            return 'No local model selected. Choose a model in Transcription settings.';
+        }
+        
+        return 'Engine stopped. Click Save Settings to start.';
+    } catch (error) {
+        console.error('Failed to get stop reason:', error);
+        return 'Engine stopped.';
+    }
 }
 
 // Tab switching
@@ -132,7 +172,7 @@ async function loadConfig() {
         await refreshLicenseStatus();
 
         const running = await invoke('is_running');
-        updateEngineButtons(running);
+        updateEngineStatus(running);
         
         console.log('Configuration loaded:', config);
     } catch (error) {
@@ -254,7 +294,46 @@ async function saveConfig() {
         console.log('Config payload being sent:', JSON.stringify({ ...config, api_key: apiKey ? '(hidden)' : null }, null, 2));
         
         await invoke('save_config', { incoming: config });
-        showStatus('Settings saved successfully!', 'success');
+        
+        // Auto-restart engine if it was running
+        const wasRunning = await invoke('is_running');
+        if (wasRunning) {
+            try {
+                await invoke('stop_engine');
+                updateEngineStatus(false);
+                await invoke('start_engine');
+                // Verify it's actually running after start
+                const isNowRunning = await invoke('is_running');
+                updateEngineStatus(isNowRunning);
+                if (isNowRunning) {
+                    showStatus('Settings saved and engine restarted!', 'success');
+                } else {
+                    showStatus('Settings saved, but engine failed to start.', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to restart engine:', error);
+                updateEngineStatus(false);
+                showStatus('Settings saved, but failed to restart: ' + error, 'error');
+            }
+        } else {
+            // Try to start engine if it wasn't running
+            try {
+                await invoke('start_engine');
+                // Verify it's actually running after start
+                const isNowRunning = await invoke('is_running');
+                updateEngineStatus(isNowRunning);
+                if (isNowRunning) {
+                    showStatus('Settings saved and engine started!', 'success');
+                } else {
+                    showStatus('Settings saved, but engine failed to start.', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to start engine:', error);
+                updateEngineStatus(false);
+                showStatus('Settings saved, but engine not started: ' + error, 'error');
+            }
+        }
+        
         return true;
     } catch (error) {
         console.error('Error saving config:', error);
@@ -305,33 +384,6 @@ async function detectKeyPress() {
     }
 }
 
-// Start transcription
-async function startTranscription() {
-    try {
-        // Save and validate config first
-        const saved = await saveConfig();
-        if (!saved) {
-            return;
-        }
-        
-        await invoke('start_engine');
-        updateEngineButtons(true);
-        showStatus('Transcription started! Hold your PTT key to record.', 'success');
-    } catch (error) {
-        showStatus('Error starting transcription: ' + error, 'error');
-    }
-}
-
-// Stop transcription
-async function stopTranscription() {
-    try {
-        await invoke('stop_engine');
-        updateEngineButtons(false);
-        showStatus('Transcription stopped', 'success');
-    } catch (error) {
-        showStatus('Error stopping transcription: ' + error, 'error');
-    }
-}
 
 // Validate API key
 async function validateApiKey() {
@@ -418,9 +470,25 @@ async function activateLicense() {
         licenseInfo.hasLicense = true;
         updateLicenseSection();
         
-        statusEl.textContent = 'License activated successfully!';
+        statusEl.textContent = 'License activated successfully! Starting engine...';
         statusEl.className = 'status success';
         keyInput.value = ''; // Clear the input field after success
+        
+        // Try to start the engine now that we have a valid license
+        try {
+            await invoke('start_engine');
+            const isRunning = await invoke('is_running');
+            await updateEngineStatus(isRunning);
+            if (isRunning) {
+                statusEl.textContent = 'License activated and engine started!';
+            } else {
+                statusEl.textContent = 'License activated, but engine failed to start. Check settings.';
+            }
+        } catch (engineError) {
+            console.error('Failed to start engine after activation:', engineError);
+            await updateEngineStatus(false);
+            statusEl.textContent = 'License activated, but engine failed to start: ' + engineError;
+        }
         
         setTimeout(() => {
             statusEl.textContent = '';
@@ -529,10 +597,6 @@ function updateLicenseSection() {
 // Event listeners
 document.getElementById('saveBtn').addEventListener('click', saveConfig);
 document.getElementById('saveBtn2').addEventListener('click', saveConfig);
-document.getElementById('startBtn').addEventListener('click', startTranscription);
-document.getElementById('startBtn2').addEventListener('click', startTranscription);
-document.getElementById('stopBtn').addEventListener('click', stopTranscription);
-document.getElementById('stopBtn2').addEventListener('click', stopTranscription);
 document.getElementById('validateKeyBtn').addEventListener('click', validateApiKey);
 document.getElementById('refreshDevicesBtn').addEventListener('click', loadAudioDevices);
 document.getElementById('activateLicenseBtn').addEventListener('click', activateLicense);
@@ -586,6 +650,13 @@ document.getElementById('deactivateLicenseBtn').addEventListener('click', async 
         return;
     }
     try {
+        // Stop the engine first (license is required)
+        const wasRunning = await invoke('is_running');
+        if (wasRunning) {
+            await invoke('stop_engine');
+            updateEngineStatus(false);
+        }
+        
         await invoke('deactivate_license');
         licenseInfo.hasLicense = false;
         licenseInfo.status = 'Unlicensed';
@@ -595,7 +666,7 @@ document.getElementById('deactivateLicenseBtn').addEventListener('click', async 
         licenseInfo.maxMachines = null;
         licenseInfo.machinesUsed = null;
         updateLicenseSection();
-        showStatus('License deactivated successfully!', 'success');
+        showStatus('License deactivated successfully! Engine stopped.', 'success');
     } catch (error) {
         console.error('Failed to deactivate license:', error);
         showStatus('Failed to deactivate license: ' + error, 'error');

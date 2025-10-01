@@ -10,7 +10,8 @@
     <div class="container">
         <header>
             <h1>🎤 DeskTalk Settings</h1>
-            <p class="subtitle">Configure your voice transcription assistant</p>
+            <p class="subtitle">Configure your voice transcription assistant • Status: <span id="engineStatus" class="status-badge">Stopped</span></p>
+            <p id="engineError" class="engine-error" style="display: none;"></p>
         </header>
 
         <div class="tabs">
@@ -65,8 +66,6 @@
             
             <footer>
                 <button id="saveBtn" class="btn btn-primary">Save Settings</button>
-                <button id="startBtn" class="btn btn-success">Start Transcription</button>
-                <button id="stopBtn" class="btn btn-danger" style="display: none;">Stop Transcription</button>
                 <div class="status" id="status"></div>
             </footer>
         </div>
@@ -112,8 +111,6 @@
             
             <footer>
                 <button id="saveBtn2" class="btn btn-primary">Save Settings</button>
-                <button id="startBtn2" class="btn btn-success">Start Transcription</button>
-                <button id="stopBtn2" class="btn btn-danger" style="display: none;">Stop Transcription</button>
                 <div class="status" id="status2"></div>
             </footer>
         </div>

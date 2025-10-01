@@ -133,8 +133,30 @@ pub fn is_running(state: tauri::State<AppState>) -> Result<bool, String> {
 
 #[tauri::command]
 pub fn validate_api_key(api_key: String) -> Result<bool, String> {
-    // Simple validation - check if it starts with sk-
-    Ok(api_key.starts_with("sk-") && api_key.len() > 20)
+    // Validate OpenAI API key format
+    // Standard format: sk-[48 alphanumeric characters] or sk-proj-[64 characters]
+    if !api_key.starts_with("sk-") {
+        return Ok(false);
+    }
+
+    // Check minimum length (sk- + at least 20 chars)
+    if api_key.len() < 23 {
+        return Ok(false);
+    }
+
+    // OpenAI keys are typically 48-64 characters after 'sk-' or 'sk-proj-'
+    let key_part = if api_key.starts_with("sk-proj-") {
+        &api_key[8..]
+    } else {
+        &api_key[3..]
+    };
+
+    // Check it contains only valid characters (alphanumeric and possibly some symbols)
+    let is_valid_format = key_part
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_');
+
+    Ok(is_valid_format && key_part.len() >= 20)
 }
 
 #[tauri::command]

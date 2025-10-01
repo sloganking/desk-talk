@@ -37,6 +37,13 @@ header h1 {
     font-size: 14px;
 }
 
+.engine-error {
+    color: #fbbf24;
+    font-size: 13px;
+    margin-top: 8px;
+    font-weight: 500;
+}
+
 .status-badge {
     display: inline-block;
     padding: 4px 12px;
