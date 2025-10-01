@@ -29,6 +29,12 @@ fn auto_start_if_possible<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<AppState>();
     let config = state.config.read().clone();
 
+    // Check for license first
+    if config.license_key.is_none() {
+        println!("Auto-start skipped: no active license");
+        return;
+    }
+
     if config.get_ptt_key().is_none() {
         println!("Auto-start skipped: no PTT key configured");
         return;
@@ -67,14 +73,57 @@ fn auto_start_if_possible<R: Runtime>(app: &AppHandle<R>) {
 }
 
 #[tauri::command]
-fn start_engine<R: Runtime>(
+async fn start_engine<R: Runtime>(
     app_handle: AppHandle<R>,
-    state: State<AppState>,
-    engine_state: State<AppEngine>,
+    state: State<'_, AppState>,
+    engine_state: State<'_, AppEngine>,
 ) -> Result<(), String> {
     if engine_state.engine.lock().is_some() {
         println!("Engine already running");
         return Ok(());
+    }
+
+    // Check for valid license before starting
+    let (has_license, license_key, fingerprint) = {
+        let config = state.config.read();
+        (
+            config.license_key.is_some(),
+            config.license_key.clone(),
+            config.machine_id.clone(),
+        )
+    };
+
+    if !has_license {
+        return Err("No active license. Please activate a license to use DeskTalk.".to_string());
+    }
+
+    // Validate the license is still active
+    if let Some(client) = state.keygen_client() {
+        if let Some(key) = license_key {
+            match client.validate_license(&key, &fingerprint).await {
+                Ok(validation) => {
+                    let status = validation
+                        .license
+                        .status
+                        .as_deref()
+                        .unwrap_or("UNKNOWN")
+                        .to_uppercase();
+                    if status != "ACTIVE" {
+                        return Err(format!(
+                            "License is {}. Please contact support.",
+                            status.to_lowercase()
+                        ));
+                    }
+                    println!("License validated: {}", status);
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "License validation failed: {}. Please reactivate your license.",
+                        e
+                    ));
+                }
+            }
+        }
     }
 
     println!("Starting transcription engine...");
