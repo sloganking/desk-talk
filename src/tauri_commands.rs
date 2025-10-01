@@ -160,6 +160,30 @@ pub fn validate_api_key(api_key: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub async fn test_openai_key(api_key: String) -> Result<bool, String> {
+    // Actually test the key with OpenAI API
+    let client = reqwest::Client::new();
+    let response = client
+        .get("https://api.openai.com/v1/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                Ok(true)
+            } else if resp.status() == 401 {
+                Err("Invalid API key - authentication failed".to_string())
+            } else {
+                Err(format!("API key test failed: HTTP {}", resp.status()))
+            }
+        }
+        Err(e) => Err(format!("Network error testing API key: {}", e)),
+    }
+}
+
+#[tauri::command]
 pub async fn detect_key_press() -> Result<String, String> {
     // Disabled to prevent crashes - users can select from dropdown
     Err("Please select a key from the dropdown menu. Auto-detection is disabled to prevent crashes.".to_string())

@@ -267,6 +267,7 @@ fn main() {
             tauri_commands::stop_transcription,
             tauri_commands::is_running,
             tauri_commands::validate_api_key,
+            tauri_commands::test_openai_key,
             tauri_commands::detect_key_press,
             tauri_commands::fetch_license_status,
             tauri_commands::activate_license,

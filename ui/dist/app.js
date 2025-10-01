@@ -70,7 +70,7 @@ async function getEngineStopReason() {
     try {
         const config = await invoke('get_config');
         
-        // Check license first
+        // Check license first (most important)
         if (!config.license_key) {
             return 'No active license. Please activate a license to use DeskTalk.';
         }
@@ -90,7 +90,9 @@ async function getEngineStopReason() {
             return 'No local model selected. Choose a model in Transcription settings.';
         }
         
-        return 'Engine stopped. Click Save Settings to start.';
+        // All required config is present, but engine isn't running
+        // This means it failed to start or was manually stopped
+        return 'Engine stopped. Save Settings to restart, or check for errors above.';
     } catch (error) {
         console.error('Failed to get stop reason:', error);
         return 'Engine stopped.';
@@ -293,6 +295,21 @@ async function saveConfig() {
         
         console.log('Config payload being sent:', JSON.stringify({ ...config, api_key: apiKey ? '(hidden)' : null }, null, 2));
         
+        // Test OpenAI API key if using OpenAI mode
+        if (!isLocal && apiKey) {
+            try {
+                showStatus('Testing API key...', '');
+                await invoke('test_openai_key', { apiKey });
+                console.log('API key test passed');
+            } catch (error) {
+                console.error('API key test failed:', error);
+                await updateEngineStatus(false, error.toString());
+                showStatus('Settings saved, but API key is invalid: ' + error, 'error');
+                await invoke('save_config', { incoming: config });
+                return true;
+            }
+        }
+        
         await invoke('save_config', { incoming: config });
         
         // Auto-restart engine if it was running
@@ -300,11 +317,11 @@ async function saveConfig() {
         if (wasRunning) {
             try {
                 await invoke('stop_engine');
-                updateEngineStatus(false);
+                await updateEngineStatus(false);
                 await invoke('start_engine');
                 // Verify it's actually running after start
                 const isNowRunning = await invoke('is_running');
-                updateEngineStatus(isNowRunning);
+                await updateEngineStatus(isNowRunning);
                 if (isNowRunning) {
                     showStatus('Settings saved and engine restarted!', 'success');
                 } else {
@@ -312,7 +329,7 @@ async function saveConfig() {
                 }
             } catch (error) {
                 console.error('Failed to restart engine:', error);
-                updateEngineStatus(false);
+                await updateEngineStatus(false);
                 showStatus('Settings saved, but failed to restart: ' + error, 'error');
             }
         } else {
@@ -321,7 +338,7 @@ async function saveConfig() {
                 await invoke('start_engine');
                 // Verify it's actually running after start
                 const isNowRunning = await invoke('is_running');
-                updateEngineStatus(isNowRunning);
+                await updateEngineStatus(isNowRunning);
                 if (isNowRunning) {
                     showStatus('Settings saved and engine started!', 'success');
                 } else {
@@ -329,7 +346,7 @@ async function saveConfig() {
                 }
             } catch (error) {
                 console.error('Failed to start engine:', error);
-                updateEngineStatus(false);
+                await updateEngineStatus(false);
                 showStatus('Settings saved, but engine not started: ' + error, 'error');
             }
         }
@@ -654,7 +671,6 @@ document.getElementById('deactivateLicenseBtn').addEventListener('click', async 
         const wasRunning = await invoke('is_running');
         if (wasRunning) {
             await invoke('stop_engine');
-            updateEngineStatus(false);
         }
         
         await invoke('deactivate_license');
@@ -666,6 +682,10 @@ document.getElementById('deactivateLicenseBtn').addEventListener('click', async 
         licenseInfo.maxMachines = null;
         licenseInfo.machinesUsed = null;
         updateLicenseSection();
+        
+        // Update status with proper error message (will show "No active license...")
+        await updateEngineStatus(false);
+        
         showStatus('License deactivated successfully! Engine stopped.', 'success');
     } catch (error) {
         console.error('Failed to deactivate license:', error);
