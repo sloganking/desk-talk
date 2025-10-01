@@ -36,7 +36,7 @@
         "height": 600,
         "resizable": true,
         "fullscreen": false,
-        "visible": true,
+        "visible": false,
         "url": "index.html",
         "label": "settings",
         "center": true

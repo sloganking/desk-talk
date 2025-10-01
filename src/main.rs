@@ -224,6 +224,10 @@ fn main() {
             let handle_for_tray = app.handle().clone();
             let handle_for_auto_start = app.handle().clone();
 
+            // Check if we should start minimized BEFORE creating anything
+            let state = app.state::<AppState>();
+            let should_minimize = state.config.read().start_minimized;
+
             // Create tray menu
             let menu = create_tray_menu(&handle)?;
             let icon = app.default_window_icon().cloned();
@@ -250,14 +254,12 @@ fn main() {
                     }
                 });
 
-                // Check if we should start minimized
-                let state = app.state::<AppState>();
-                let should_minimize = state.config.read().start_minimized;
-                if should_minimize {
-                    let _ = window.hide();
-                    println!("Starting minimized to tray");
-                } else {
+                // Show window if NOT configured to start minimized
+                if !should_minimize {
+                    let _ = window.show();
                     println!("Starting with window visible");
+                } else {
+                    println!("Starting minimized to tray");
                 }
             }
 
