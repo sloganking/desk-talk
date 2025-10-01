@@ -334,3 +334,94 @@ pub async fn deactivate_license(state: tauri::State<'_, AppState>) -> Result<(),
     }
     Ok(())
 }
+
+#[derive(serde::Serialize)]
+pub struct TrialStatus {
+    pub is_trial: bool,
+    pub days_remaining: i64,
+    pub expired: bool,
+    pub expiration_date: Option<String>,
+}
+
+#[tauri::command]
+pub fn start_trial(state: tauri::State<'_, AppState>) -> Result<TrialStatus, String> {
+    use chrono::{Duration, Utc};
+
+    let mut config = state.config.write();
+
+    // Don't start trial if already has license or trial already started
+    if config.license_key.is_some() {
+        return Err("Already have an active license".to_string());
+    }
+
+    if config.trial_started {
+        // Trial already started, return current status
+        return get_trial_status_internal(&config);
+    }
+
+    // Start new 7-day trial
+    let expiration = Utc::now() + Duration::days(7);
+    config.trial_started = true;
+    config.trial_expiration = Some(expiration.to_rfc3339());
+    config.license_plan = Some("Trial".to_string());
+
+    config
+        .save()
+        .map_err(|e| format!("Failed to save trial config: {}", e))?;
+
+    println!("Started 7-day trial, expires: {}", expiration);
+
+    Ok(TrialStatus {
+        is_trial: true,
+        days_remaining: 7,
+        expired: false,
+        expiration_date: Some(expiration.to_rfc3339()),
+    })
+}
+
+#[tauri::command]
+pub fn get_trial_status(state: tauri::State<'_, AppState>) -> Result<TrialStatus, String> {
+    let config = state.config.read();
+    get_trial_status_internal(&config)
+}
+
+fn get_trial_status_internal(config: &crate::config::AppConfig) -> Result<TrialStatus, String> {
+    use chrono::{DateTime, Utc};
+
+    // If has license key, not in trial
+    if config.license_key.is_some() {
+        return Ok(TrialStatus {
+            is_trial: false,
+            days_remaining: 0,
+            expired: false,
+            expiration_date: None,
+        });
+    }
+
+    // If trial never started, return not-in-trial status
+    if !config.trial_started || config.trial_expiration.is_none() {
+        return Ok(TrialStatus {
+            is_trial: false,
+            days_remaining: 0,
+            expired: false,
+            expiration_date: None,
+        });
+    }
+
+    // Parse expiration date
+    let expiration_str = config.trial_expiration.as_ref().unwrap();
+    let expiration = DateTime::parse_from_rfc3339(expiration_str)
+        .map_err(|e| format!("Invalid expiration date: {}", e))?
+        .with_timezone(&Utc);
+
+    let now = Utc::now();
+    let days_remaining = (expiration - now).num_days();
+    let expired = now >= expiration;
+
+    Ok(TrialStatus {
+        is_trial: true,
+        days_remaining: days_remaining.max(0),
+        expired,
+        expiration_date: Some(expiration_str.clone()),
+    })
+}

@@ -591,18 +591,57 @@ async function activateLicense() {
     }
 }
 
-function updateLicenseSection() {
+async function updateLicenseSection() {
     const statusEl = document.getElementById('licenseStatus');
-    const status = (licenseInfo.status || 'Unknown').toLowerCase();
+    
+    // Check trial status
+    let trialStatus = null;
+    try {
+        trialStatus = await invoke('get_trial_status');
+    } catch (e) {
+        console.warn('Failed to get trial status:', e);
+    }
+    
+    // Determine effective status
+    let status = 'unlicensed';
+    let displayText = 'Unlicensed';
+    
+    if (licenseInfo.hasLicense) {
+        status = (licenseInfo.status || 'unknown').toLowerCase();
+        displayText = licenseInfo.status || 'Unknown';
+    } else if (trialStatus && trialStatus.is_trial) {
+        if (trialStatus.expired) {
+            status = 'expired';
+            displayText = 'Trial Expired';
+        } else {
+            status = 'trial';
+            displayText = 'Trial Active';
+        }
+    }
     
     // Clear and create badge
     statusEl.innerHTML = '';
     const badge = document.createElement('span');
     badge.className = `status-badge ${status}`;
-    badge.textContent = licenseInfo.status || 'Unknown';
+    badge.textContent = displayText;
     statusEl.appendChild(badge);
     
-    document.getElementById('licensePlan').textContent = licenseInfo.plan || 'Unknown';
+    // Update plan
+    if (trialStatus && trialStatus.is_trial && !licenseInfo.hasLicense) {
+        document.getElementById('licensePlan').textContent = 'Trial';
+    } else {
+        document.getElementById('licensePlan').textContent = licenseInfo.plan || '—';
+    }
+    
+    // Show trial days remaining if in trial
+    const trialDaysRow = document.getElementById('trialDaysRow');
+    const trialDaysEl = document.getElementById('trialDaysRemaining');
+    if (trialStatus && trialStatus.is_trial && !licenseInfo.hasLicense) {
+        trialDaysEl.textContent = trialStatus.days_remaining;
+        trialDaysRow.style.display = 'block';
+    } else {
+        trialDaysRow.style.display = 'none';
+    }
 
     const keyRow = document.getElementById('licenseKeyRow');
     const keyDisplay = document.getElementById('licenseKeyDisplay');
@@ -617,6 +656,9 @@ function updateLicenseSection() {
     if (licenseInfo.expiresAt) {
         const date = new Date(licenseInfo.expiresAt);
         expiresEl.textContent = date.toLocaleString();
+    } else if (trialStatus && trialStatus.is_trial && trialStatus.expiration_date) {
+        const date = new Date(trialStatus.expiration_date);
+        expiresEl.textContent = date.toLocaleString();
     } else {
         expiresEl.textContent = '—';
     }
@@ -630,31 +672,87 @@ function updateLicenseSection() {
     }
 
     const message = document.getElementById('licenseMessage');
-    const activateSection = document.querySelector('#license .section:nth-child(2)'); // Activate License section
-    const buySection = document.querySelector('#license .section:nth-child(3)'); // Buy License section
+    const trialSection = document.getElementById('trialSection');
+    const activateSection = document.getElementById('activateSection');
+    const buySection = document.getElementById('buySection');
     const deactivateSection = document.getElementById('deactivateSection');
     
-    if (!licenseInfo.hasLicense) {
-        message.textContent = 'Enter your license key to unlock DeskTalk Pro features.';
-        message.classList.remove('success');
-        message.classList.add('error');
-        if (activateSection) activateSection.style.display = 'block';
-        if (buySection) buySection.style.display = 'block';
-        if (deactivateSection) deactivateSection.style.display = 'none';
-    } else if (licenseInfo.status && licenseInfo.status.toLowerCase() === 'suspended') {
-        message.textContent = 'License suspended. Contact support to restore access.';
-        message.classList.remove('success');
-        message.classList.add('error');
-        if (activateSection) activateSection.style.display = 'none';
-        if (buySection) buySection.style.display = 'block';
-        if (deactivateSection) deactivateSection.style.display = 'block';
-    } else {
+    // Show/hide sections based on license/trial status
+    if (licenseInfo.hasLicense) {
+        // Has active license
         message.textContent = 'License active. Thank you for supporting DeskTalk!';
         message.classList.remove('error');
         message.classList.add('success');
-        if (activateSection) activateSection.style.display = 'none';
-        if (buySection) buySection.style.display = 'none';
-        if (deactivateSection) deactivateSection.style.display = 'block';
+        trialSection.style.display = 'none';
+        activateSection.style.display = 'none';
+        buySection.style.display = 'none';
+        deactivateSection.style.display = 'block';
+    } else if (trialStatus && trialStatus.is_trial) {
+        // In trial (active or expired)
+        if (trialStatus.expired) {
+            message.textContent = 'Your trial has expired. Purchase a license to continue using DeskTalk.';
+            message.classList.remove('success');
+            message.classList.add('error');
+        } else {
+            message.textContent = `Trial active! ${trialStatus.days_remaining} days remaining. Purchase a license for unlimited access.`;
+            message.classList.remove('error');
+            message.classList.add('success');
+        }
+        trialSection.style.display = 'none';
+        activateSection.style.display = 'block';
+        buySection.style.display = 'block';
+        deactivateSection.style.display = 'none';
+    } else {
+        // No license, no trial
+        message.textContent = 'Start a free 7-day trial or enter your license key.';
+        message.classList.remove('success');
+        message.classList.add('error');
+        trialSection.style.display = 'block';
+        activateSection.style.display = 'block';
+        buySection.style.display = 'block';
+        deactivateSection.style.display = 'none';
+    }
+}
+
+async function startTrial() {
+    const statusEl = document.getElementById('trialStatus');
+    const startBtn = document.getElementById('startTrialBtn');
+    
+    try {
+        statusEl.textContent = 'Starting trial...';
+        statusEl.className = 'status';
+        startBtn.disabled = true;
+        
+        const result = await invoke('start_trial');
+        
+        statusEl.textContent = 'Trial started! You have 7 days of full access.';
+        statusEl.className = 'status success';
+        
+        // Refresh license section to show trial status
+        await updateLicenseSection();
+        
+        // Try to start the engine now that trial is active
+        try {
+            await invoke('start_engine');
+            await updateEngineStatus(true);
+        } catch (e) {
+            console.warn('Failed to auto-start engine after trial:', e);
+        }
+        
+        setTimeout(() => {
+            statusEl.textContent = '';
+            statusEl.className = 'status';
+        }, 5000);
+    } catch (error) {
+        console.error('Failed to start trial:', error);
+        statusEl.textContent = 'Failed to start trial: ' + error;
+        statusEl.className = 'status error';
+        startBtn.disabled = false;
+        
+        setTimeout(() => {
+            statusEl.textContent = '';
+            statusEl.className = 'status';
+        }, 5000);
     }
 }
 
@@ -679,6 +777,8 @@ const detectKeyBtn = document.getElementById('detectKeyBtn');
 if (detectKeyBtn) {
     detectKeyBtn.addEventListener('click', detectKeyPress);
 }
+
+document.getElementById('startTrialBtn').addEventListener('click', startTrial);
 
 document.getElementById('buyLicenseBtn').addEventListener('click', async () => {
     try {

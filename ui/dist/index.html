@@ -148,7 +148,8 @@
                 <h2>License Status</h2>
                 <div class="license-status">
                     <p><strong>Status:</strong> <span id="licenseStatus">Not Activated</span></p>
-                    <p><strong>Plan:</strong> <span id="licensePlan">Trial</span></p>
+                    <p><strong>Plan:</strong> <span id="licensePlan">—</span></p>
+                    <p id="trialDaysRow" style="display: none;"><strong>Trial Days Remaining:</strong> <span id="trialDaysRemaining">—</span></p>
                     <p id="licenseKeyRow" style="display: none;"><strong>Key:</strong> <span id="licenseKeyDisplay" style="font-family: monospace; color: #666;">—</span></p>
                     <p><strong>Expires:</strong> <span id="licenseExpires">—</span></p>
                     <p><strong>Devices:</strong> <span id="licenseDevices">—</span></p>
@@ -156,14 +157,21 @@
                 <p id="licenseMessage" class="hint status">Enter a license key to unlock DeskTalk Pro features.</p>
             </div>
 
-            <div class="section">
+            <div class="section" id="trialSection">
+                <h2>Free Trial</h2>
+                <p class="hint">Try DeskTalk Pro free for 7 days - no credit card required!</p>
+                <button id="startTrialBtn" class="btn btn-primary">Start 7-Day Free Trial</button>
+                <div class="status" id="trialStatus"></div>
+            </div>
+
+            <div class="section" id="activateSection">
                 <h2>Activate License</h2>
                 <input type="text" id="licenseKey" placeholder="Enter your license key">
                 <button id="activateLicenseBtn" class="btn btn-primary">Activate</button>
                 <div class="status" id="licenseStatus3"></div>
             </div>
 
-            <div class="section">
+            <div class="section" id="buySection">
                 <button id="buyLicenseBtn" class="btn btn-success">Buy License</button>
                 <p class="hint">License key will be sent to your email after purchase</p>
             </div>

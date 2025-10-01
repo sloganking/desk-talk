@@ -110,9 +110,16 @@ fn auto_start_if_possible<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<AppState>();
     let config = state.config.read().clone();
 
-    // Check for license first
-    if config.license_key.is_none() {
-        println!("Auto-start skipped: no active license");
+    // Check for license OR valid trial
+    let has_license = config.license_key.is_some();
+    let trial_status = tauri_commands::get_trial_status(state.clone()).ok();
+    let has_valid_trial = trial_status
+        .as_ref()
+        .map(|t| t.is_trial && !t.expired)
+        .unwrap_or(false);
+
+    if !has_license && !has_valid_trial {
+        println!("Auto-start skipped: no active license or trial");
         return;
     }
 
@@ -164,18 +171,36 @@ async fn start_engine<R: Runtime>(
         return Ok(());
     }
 
-    // Check for valid license before starting
-    let (has_license, license_key, fingerprint) = {
+    // Check for valid license OR active trial before starting
+    let (has_license, license_key, fingerprint, trial_status) = {
         let config = state.config.read();
+        let trial_status = tauri_commands::get_trial_status(state.clone()).unwrap_or(
+            tauri_commands::TrialStatus {
+                is_trial: false,
+                days_remaining: 0,
+                expired: false,
+                expiration_date: None,
+            },
+        );
         (
             config.license_key.is_some(),
             config.license_key.clone(),
             config.machine_id.clone(),
+            trial_status,
         )
     };
 
-    if !has_license {
-        return Err("No active license. Please activate a license to use DeskTalk.".to_string());
+    // Check if trial is expired
+    if trial_status.is_trial && trial_status.expired {
+        return Err(
+            "Trial period has expired. Please purchase a license to continue using DeskTalk."
+                .to_string(),
+        );
+    }
+
+    // If no license and no trial, reject
+    if !has_license && !trial_status.is_trial {
+        return Err("No active license or trial. Please activate a license or start a trial to use DeskTalk.".to_string());
     }
 
     // Validate the license is still active
@@ -364,6 +389,8 @@ fn main() {
             tauri_commands::deactivate_license,
             tauri_commands::check_license_periodically,
             tauri_commands::open_url,
+            tauri_commands::start_trial,
+            tauri_commands::get_trial_status,
             start_engine,
             stop_engine,
         ])
