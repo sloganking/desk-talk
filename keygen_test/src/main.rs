@@ -4,8 +4,12 @@ use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let account_id = "40461088-b3c4-4c48-b4ff-8267dbafd938";
-    let license_key = "D5D8FE-381ADB-4E54A0-D2323D-1FAB90-V3";
+    // TODO: Replace with a separate TEST Keygen account, not production!
+    // Get these values from environment variables for security
+    let account_id = std::env::var("KEYGEN_TEST_ACCOUNT_ID")
+        .expect("Set KEYGEN_TEST_ACCOUNT_ID environment variable");
+    let license_key = std::env::var("KEYGEN_TEST_LICENSE_KEY")
+        .expect("Set KEYGEN_TEST_LICENSE_KEY environment variable");
     let fingerprint = "test-machine-123";
 
     // Test 1: Validate license
