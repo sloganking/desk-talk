@@ -404,3 +404,24 @@ body.dark-mode .status.error {
 .license-status span {
     color: #657786;
 }
+
+.info-icon {
+    display: inline-block;
+    margin-left: 8px;
+    color: #667eea;
+    font-size: 16px;
+    cursor: help;
+    user-select: none;
+}
+
+.info-icon:hover {
+    color: #764ba2;
+}
+
+body.dark-mode .info-icon {
+    color: #667eea;
+}
+
+body.dark-mode .info-icon:hover {
+    color: #8b9cf6;
+}
