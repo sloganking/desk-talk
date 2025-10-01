@@ -394,13 +394,22 @@ async function refreshLicenseStatus() {
 async function activateLicense() {
     const keyInput = document.getElementById('licenseKey');
     const licenseKey = keyInput.value.trim();
+    const statusEl = document.getElementById('licenseStatus3');
+    
     if (!licenseKey) {
-        showStatus('Please enter a license key.', 'error');
+        statusEl.textContent = 'Please enter a license key.';
+        statusEl.className = 'status error';
+        setTimeout(() => {
+            statusEl.textContent = '';
+            statusEl.className = 'status';
+        }, 5000);
         return;
     }
 
     try {
-        showStatus('Activating license...', '');
+        statusEl.textContent = 'Activating license...';
+        statusEl.className = 'status';
+        
         const status = await invoke('activate_license', { licenseKey });
         licenseInfo.status = status.status || 'Active';
         licenseInfo.plan = status.plan || 'Pro';
@@ -410,28 +419,45 @@ async function activateLicense() {
         licenseInfo.machinesUsed = status.machines_used || null;
         licenseInfo.hasLicense = true;
         updateLicenseSection();
-        showStatus('License activated successfully!', 'success');
+        
+        statusEl.textContent = 'License activated successfully!';
+        statusEl.className = 'status success';
         keyInput.value = ''; // Clear the input field after success
+        
+        setTimeout(() => {
+            statusEl.textContent = '';
+            statusEl.className = 'status';
+        }, 5000);
     } catch (error) {
         console.error('Activation failed:', error);
         // Show more specific error messages
-        let errorMsg = 'Activation failed: ';
+        let errorMsg = '';
         if (error.toString().includes('Invalid license key')) {
-            errorMsg += 'Invalid license key';
+            errorMsg = 'Invalid license key';
         } else if (error.toString().includes('not found')) {
-            errorMsg += 'License key not found';
+            errorMsg = 'License key not found';
         } else if (error.toString().includes('suspended')) {
-            errorMsg += 'License suspended';
+            errorMsg = 'License suspended';
         } else if (error.toString().includes('expired')) {
-            errorMsg += 'License expired';
-        } else if (error.toString().includes('max machines')) {
-            errorMsg += 'Maximum devices reached';
+            errorMsg = 'License expired';
+        } else if (error.toString().includes('max machines') || error.toString().includes('maximum')) {
+            errorMsg = 'Maximum devices reached';
+        } else if (error.toString().includes('Licensing not configured')) {
+            errorMsg = 'Licensing system not configured. Contact support.';
         } else {
-            errorMsg += error.toString();
+            errorMsg = 'Activation failed: ' + error.toString();
         }
-        showStatus(errorMsg, 'error');
+        
+        statusEl.textContent = errorMsg;
+        statusEl.className = 'status error';
         licenseInfo.hasLicense = false;
         updateLicenseSection();
+        
+        // Keep error visible longer
+        setTimeout(() => {
+            statusEl.textContent = '';
+            statusEl.className = 'status';
+        }, 8000);
     }
 }
 
