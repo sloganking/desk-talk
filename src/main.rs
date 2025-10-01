@@ -168,8 +168,8 @@ async fn start_engine<R: Runtime>(
 ) -> Result<(), String> {
     if engine_state.engine.lock().is_some() {
         println!("Engine already running");
-        return Ok(());
-    }
+                        return Ok(());
+                    }
 
     // Check for valid license OR active trial before starting
     let (has_license, license_key, fingerprint, trial_status) = {
