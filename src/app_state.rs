@@ -1,6 +1,8 @@
 use crate::config::{AppConfig, KeygenConfig};
 use crate::license::KeygenClient;
+use flume::Sender;
 use parking_lot::RwLock;
+use rdev::Event;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -9,6 +11,7 @@ pub struct AppState {
     pub keygen: Arc<RwLock<Option<Arc<KeygenClient>>>>,
     pub is_running: Arc<RwLock<bool>>,
     pub statistics: Arc<RwLock<Statistics>>,
+    pub event_sender: Arc<RwLock<Option<Sender<Event>>>>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -45,6 +48,7 @@ impl AppState {
             keygen: Arc::new(RwLock::new(keygen_client)),
             is_running: Arc::new(RwLock::new(false)),
             statistics: Arc::new(RwLock::new(Statistics::default())),
+            event_sender: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -58,6 +62,18 @@ impl AppState {
 
     pub fn is_running(&self) -> bool {
         *self.is_running.read()
+    }
+
+    pub fn set_event_sender(&self, sender: Sender<Event>) {
+        *self.event_sender.write() = Some(sender);
+    }
+
+    pub fn clear_event_sender(&self) {
+        self.event_sender.write().take();
+    }
+
+    pub fn event_sender(&self) -> Option<Sender<Event>> {
+        self.event_sender.read().clone()
     }
 
     pub fn update_statistics(&self, words: usize, duration_secs: f64, wpm: f64) {

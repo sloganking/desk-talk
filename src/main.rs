@@ -12,8 +12,14 @@ mod transcription_engine;
 
 use app_state::AppState;
 use config::AppConfig;
+use default_device_sink::DefaultDeviceSink;
 use parking_lot::Mutex;
+use rdev::{listen, Event, EventType};
+use rodio::{source::SineWave, Decoder, Source};
+use std::io::{BufReader, Cursor};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -21,8 +27,78 @@ use tauri::{
 };
 use transcription_engine::TranscriptionEngine;
 
+static FAILED_BYTES: &[u8] = include_bytes!("../assets/failed.mp3");
+
 struct AppEngine {
     engine: Arc<Mutex<Option<TranscriptionEngine>>>,
+}
+
+pub fn play_error_sound() {
+    let sink = DefaultDeviceSink::new();
+    if let Ok(decoder) = Decoder::new(BufReader::new(Cursor::new(FAILED_BYTES))) {
+        sink.append(decoder);
+    } else {
+        sink.append(
+            SineWave::new(440.0)
+                .take_duration(Duration::from_millis(150))
+                .amplify(0.20),
+        );
+    }
+    sink.sleep_until_end();
+}
+
+fn start_global_event_listener(app_state: AppState) {
+    thread::spawn(move || {
+        println!("Global event listener started");
+
+        // Channel for error sound playback (avoid blocking rdev callback)
+        let (error_tx, error_rx): (flume::Sender<()>, flume::Receiver<()>) = flume::unbounded();
+
+        // Thread to play error sounds (so rdev callback isn't blocked)
+        thread::spawn(move || {
+            for _ in error_rx.iter() {
+                play_error_sound();
+            }
+        });
+
+        let mut ptt_key_pressed = false;
+
+        let callback = move |event: Event| {
+            let running = app_state.is_running();
+
+            let sender_opt = app_state.event_sender();
+            if running {
+                if let Some(sender) = sender_opt {
+                    let _ = sender.send(event.clone());
+                }
+            }
+
+            // Track PTT key state and play error sound only on press (not while held)
+            if let Some(ptt_key) = app_state.config.read().get_ptt_key() {
+                match event.event_type {
+                    EventType::KeyPress(key) => {
+                        if key == ptt_key && !ptt_key_pressed {
+                            ptt_key_pressed = true;
+                            if !running {
+                                println!("PTT pressed but engine is stopped - playing error sound");
+                                let _ = error_tx.send(()); // Non-blocking send to error sound thread
+                            }
+                        }
+                    }
+                    EventType::KeyRelease(key) => {
+                        if key == ptt_key {
+                            ptt_key_pressed = false;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        };
+
+        if let Err(error) = listen(callback) {
+            eprintln!("Error in global event listener: {:?}", error);
+        }
+    });
 }
 
 fn auto_start_if_possible<R: Runtime>(app: &AppHandle<R>) {
@@ -323,6 +399,10 @@ fn main() {
                     println!("Starting minimized to tray");
                 }
             }
+
+            // Start global event listener for PTT handling
+            let state_for_listener = app.state::<AppState>();
+            start_global_event_listener(state_for_listener.inner().clone());
 
             // Attempt to auto-start transcription if configuration is ready
             auto_start_if_possible(&handle_for_auto_start);

@@ -33,7 +33,7 @@
       {
         "title": "DeskTalk Settings",
         "width": 800,
-        "height": 600,
+        "height": 800,
         "resizable": true,
         "fullscreen": false,
         "visible": false,

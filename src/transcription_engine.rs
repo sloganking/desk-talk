@@ -7,7 +7,7 @@ use clipboard::{ClipboardContext, ClipboardProvider};
 use default_device_sink::DefaultDeviceSink;
 use enigo::{Enigo, KeyboardControllable};
 use parking_lot::Mutex;
-use rdev::{listen, Event};
+use rdev::Event;
 use rodio::{source::SineWave, Decoder, Source};
 use std::collections::VecDeque;
 use std::io::{BufReader, Cursor};
@@ -110,31 +110,20 @@ impl TranscriptionEngine {
         println!("Configuration validated successfully");
 
         let (tx, rx): (flume::Sender<Event>, flume::Receiver<Event>) = flume::unbounded();
-        let app_state = self.app_state.clone();
+        let app_state_for_handler = self.app_state.clone();
         let stop_signal_for_key_thread = self.stop_signal.clone();
+
+        // Register sender so the global listener can forward events
+        self.app_state.set_event_sender(tx);
 
         // Start key handler thread
         thread::spawn(move || {
-            Self::key_handler_thread(rx, app_state, config, stop_signal_for_key_thread);
-        });
-
-        // Start event listener thread
-        let stop_signal_listener = self.stop_signal.clone();
-        thread::spawn(move || {
-            println!("Event listener thread started");
-            let callback = move |event: Event| {
-                if *stop_signal_listener.lock() {
-                    // Signal to stop listening
-                    return;
-                }
-                if let Err(e) = tx.send(event) {
-                    eprintln!("Failed to send event to key handler: {}", e);
-                }
-            };
-
-            if let Err(error) = listen(callback) {
-                eprintln!("Error in event listener: {:?}", error);
-            }
+            Self::key_handler_thread(
+                rx,
+                app_state_for_handler,
+                config,
+                stop_signal_for_key_thread,
+            );
         });
 
         self.app_state.start_transcription();
@@ -145,6 +134,7 @@ impl TranscriptionEngine {
     pub fn stop(&self) {
         *self.stop_signal.lock() = true;
         self.app_state.stop_transcription();
+        self.app_state.clear_event_sender();
     }
 
     fn key_handler_thread(
