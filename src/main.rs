@@ -289,14 +289,9 @@ fn stop_engine<R: Runtime>(
 
 fn create_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let open_settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
-    let restart_item = MenuItem::with_id(app, "restart", "Restart Engine", true, None::<&str>)?;
-    let stop_item = MenuItem::with_id(app, "stop", "Stop Engine", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
-    Menu::with_items(
-        app,
-        &[&open_settings, &restart_item, &stop_item, &quit_item],
-    )
+    Menu::with_items(app, &[&open_settings, &quit_item])
 }
 
 fn handle_tray_event<R: Runtime>(app: &AppHandle<R>, event: TrayIconEvent) {
@@ -320,23 +315,6 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-        }
-        "restart" => {
-            let state = app.state::<AppState>();
-            let engine_state = app.state::<AppEngine>();
-            // Stop then start
-            let _ = stop_engine(app.clone(), engine_state.clone());
-            // Need to spawn async task for start_engine
-            let app_clone = app.clone();
-            tauri::async_runtime::spawn(async move {
-                let state = app_clone.state::<AppState>();
-                let engine_state = app_clone.state::<AppEngine>();
-                let _ = start_engine(app_clone.clone(), state, engine_state).await;
-            });
-        }
-        "stop" => {
-            let engine_state = app.state::<AppEngine>();
-            let _ = stop_engine(app.clone(), engine_state);
         }
         "quit" => {
             app.exit(0);
