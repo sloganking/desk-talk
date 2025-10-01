@@ -1,0 +1,67 @@
+{
+  "productName": "DeskTalk",
+  "version": "0.2.0",
+  "identifier": "com.desk-talk.app",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "frontendDist": "ui/dist"
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": ["assets/*", ".env.licenses"],
+    "externalBin": [],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "compression": "lzma"
+      }
+    },
+    "publisher": "DeskTalk",
+    "copyright": "Copyright © 2025",
+    "category": "Productivity",
+    "shortDescription": "Voice-to-text transcription for your desktop",
+    "longDescription": "DeskTalk records what you say when you press a button down, and types what you said when you release it.",
+    "homepage": "https://desktalk.app",
+    "licenseFile": "LICENSE"
+  },
+  "app": {
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$RESOURCE/**"]
+      }
+    },
+    "windows": [
+      {
+        "title": "DeskTalk Settings",
+        "width": 800,
+        "height": 950,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false,
+        "url": "index.html",
+        "label": "settings",
+        "center": true
+      }
+    ]
+  }
+}
