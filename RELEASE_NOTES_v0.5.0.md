@@ -8,9 +8,10 @@
 ## 🔒 Security Fixes (CRITICAL)
 
 ### Fixed: Admin Token Exposure Vulnerability
+
 - **Issue:** Previous versions bundled the Keygen admin token with customer installations
 - **Impact:** Customers could extract the admin token and create unlimited free licenses
-- **Fix:** 
+- **Fix:**
   - Created separate `.env.licenses.dist` file containing only public information
   - Admin token and policy IDs are no longer distributed to customers
   - Updated build configuration to bundle minimal config file only
@@ -22,6 +23,7 @@
 ## 🎨 User Interface Improvements
 
 ### Fixed: Tray Icon Transparency
+
 - System tray icon now displays correctly with transparent background
 - No more white square around the microphone icon
 - Works properly on both light and dark Windows themes
@@ -31,6 +33,7 @@
 ## 🛠️ Developer/Internal Changes
 
 ### Configuration System Improvements
+
 - Made `admin_token`, `policy_trial`, and `policy_pro` optional in `KeygenConfig`
 - Updated config loader to support both `.env.licenses` (dev) and `.env.licenses.dist` (production)
 - Config lookup priority:
@@ -38,10 +41,12 @@
   2. `.env.licenses.dist` (minimal config - for customer distribution)
 
 ### Test File Security
+
 - Removed hardcoded production credentials from test files
 - Test files now use environment variables for Keygen testing
 
 ### Documentation
+
 - Added `SECURITY_FIX_README.md` - Complete security fix documentation
 - Added `DEPLOYMENT_GUIDE.md` - Production deployment best practices
 - Added `PRODUCTION_SECURITY_CHECKLIST.md` - Security status and checklist
@@ -53,6 +58,7 @@
 **Download:** `DeskTalk_0.5.0_x64-setup.exe`
 
 **Requirements:**
+
 - Windows 10/11 (64-bit)
 - Valid DeskTalk license key
 
@@ -80,6 +86,7 @@ None reported.
 ## 📝 Technical Details
 
 ### What's in the Installer
+
 - ✅ `desk-talk.exe` (v0.5.0)
 - ✅ `.env.licenses.dist` (public config only)
 - ✅ Audio assets (beep sounds)
@@ -87,6 +94,7 @@ None reported.
 - ❌ **NO admin token** (secure!)
 
 ### License Validation
+
 - Customer licenses are validated using their license key
 - Machine fingerprinting prevents key sharing
 - Admin token is only needed server-side for creating licenses
@@ -109,6 +117,7 @@ cargo tauri build
 ```
 
 ### Security Checklist
+
 - [x] Admin token not in git
 - [x] `.env.licenses.dist` contains only public info
 - [x] Installer verified to exclude admin token
@@ -130,4 +139,3 @@ Special thanks to the developer for catching the admin token exposure issue befo
 **Issues:** https://github.com/sloganking/desk-talk/issues
 
 For licensing issues, check your Keygen dashboard or contact support.
-
