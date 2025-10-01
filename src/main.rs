@@ -182,6 +182,8 @@ async fn start_engine<R: Runtime>(
                 expiration_date: None,
             },
         );
+        println!("Engine start check - has_license: {}, trial.is_trial: {}, trial.expired: {}, trial.days_remaining: {}",
+                 config.license_key.is_some(), trial_status.is_trial, trial_status.expired, trial_status.days_remaining);
         (
             config.license_key.is_some(),
             config.license_key.clone(),
@@ -192,6 +194,7 @@ async fn start_engine<R: Runtime>(
 
     // Check if trial is expired
     if trial_status.is_trial && trial_status.expired {
+        println!("Rejecting engine start: trial expired");
         return Err(
             "Trial period has expired. Please purchase a license to continue using DeskTalk."
                 .to_string(),
@@ -200,8 +203,11 @@ async fn start_engine<R: Runtime>(
 
     // If no license and no trial, reject
     if !has_license && !trial_status.is_trial {
+        println!("Rejecting engine start: no license and no trial");
         return Err("No active license or trial. Please activate a license or start a trial to use DeskTalk.".to_string());
     }
+
+    println!("Engine start check passed - has valid license or trial");
 
     // Validate the license is still active
     if let Some(client) = state.keygen_client() {

@@ -290,7 +290,8 @@ pub async fn activate_license(
         config.license_key = Some(license_key.clone());
         config.license_plan = validation.license.plan.clone();
         config.license_id = Some(license_id.clone());
-        config.trial_started = false;
+        // Keep trial_started as-is (don't reset it)
+        // If user had a trial before, that info should persist
         config
             .save()
             .map_err(|e| format!("Failed to persist license: {}", e))?;
@@ -326,8 +327,9 @@ pub async fn deactivate_license(state: tauri::State<'_, AppState>) -> Result<(),
         config.license_key = None;
         config.license_plan = None;
         config.license_id = None;
-        config.trial_expiration = None;
-        config.trial_started = false;
+        // DON'T reset trial_started or trial_expiration
+        // Trial can only be used once per machine, even after license deactivation
+        // This prevents users from getting free trials repeatedly
         config
             .save()
             .map_err(|e| format!("Failed to save config: {}", e))?;
@@ -354,12 +356,21 @@ pub fn start_trial(state: tauri::State<'_, AppState>) -> Result<TrialStatus, Str
         return Err("Already have an active license".to_string());
     }
 
+    // IMPORTANT: Trial can only be started ONCE per machine, ever
+    // This prevents users from abusing the system by:
+    // 1. Starting trial
+    // 2. Buying license
+    // 3. Deactivating license
+    // 4. Starting trial again (BLOCKED HERE)
     if config.trial_started {
-        // Trial already started, return current status
-        return get_trial_status_internal(&config);
+        // Trial already used (even if expired)
+        return Err(
+            "Trial has already been used on this device. Please purchase a license to continue."
+                .to_string(),
+        );
     }
 
-    // Start new 7-day trial
+    // Start new 7-day trial (first and only time)
     let expiration = Utc::now() + Duration::days(7);
     config.trial_started = true;
     config.trial_expiration = Some(expiration.to_rfc3339());
@@ -369,7 +380,7 @@ pub fn start_trial(state: tauri::State<'_, AppState>) -> Result<TrialStatus, Str
         .save()
         .map_err(|e| format!("Failed to save trial config: {}", e))?;
 
-    println!("Started 7-day trial, expires: {}", expiration);
+    println!("Started 7-day trial (first time), expires: {}", expiration);
 
     Ok(TrialStatus {
         is_trial: true,

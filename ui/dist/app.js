@@ -70,9 +70,27 @@ async function getEngineStopReason() {
     try {
         const config = await invoke('get_config');
         
-        // Check license first (most important)
-        if (!config.license_key) {
-            return 'No active license. Please activate a license to use DeskTalk.';
+        // Check for license OR valid trial
+        let hasValidAccess = false;
+        
+        if (config.license_key) {
+            hasValidAccess = true;
+        } else {
+            // No license, check for active trial
+            try {
+                const trialStatus = await invoke('get_trial_status');
+                if (trialStatus.is_trial && !trialStatus.expired) {
+                    hasValidAccess = true;
+                } else if (trialStatus.is_trial && trialStatus.expired) {
+                    return 'Trial period has expired. Please purchase a license to continue using DeskTalk.';
+                }
+            } catch (e) {
+                console.warn('Failed to check trial status:', e);
+            }
+        }
+        
+        if (!hasValidAccess) {
+            return 'No active license or trial. Please activate a license or start a trial.';
         }
         
         // Check PTT key
@@ -839,10 +857,31 @@ document.getElementById('deactivateLicenseBtn').addEventListener('click', async 
         licenseInfo.machinesUsed = null;
         updateLicenseSection();
         
-        // Update status with proper error message (will show "No active license...")
-        await updateEngineStatus(false);
+        // Check if trial is active, and if so, restart the engine
+        let trialStatus = null;
+        try {
+            trialStatus = await invoke('get_trial_status');
+        } catch (e) {
+            console.warn('Failed to check trial status:', e);
+        }
         
-        showStatus('License deactivated successfully! Engine stopped.', 'success');
+        if (trialStatus && trialStatus.is_trial && !trialStatus.expired) {
+            // Trial is active, try to restart engine
+            console.log('Trial is active after deactivation, attempting to restart engine...');
+            try {
+                await invoke('start_engine');
+                await updateEngineStatus(true);
+                showStatus('License deactivated. Trial is active - engine restarted.', 'success');
+            } catch (e) {
+                console.error('Failed to restart engine with trial:', e);
+                await updateEngineStatus(false);
+                showStatus('License deactivated. Engine stopped: ' + e, 'error');
+            }
+        } else {
+            // No active trial
+            await updateEngineStatus(false);
+            showStatus('License deactivated successfully! Engine stopped.', 'success');
+        }
     } catch (error) {
         console.error('Failed to deactivate license:', error);
         showStatus('Failed to deactivate license: ' + error, 'error');
