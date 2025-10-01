@@ -193,32 +193,49 @@ pub async fn detect_key_press() -> Result<String, String> {
 pub async fn fetch_license_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<LicenseStatus, String> {
-    let client = state
-        .keygen_client()
-        .ok_or_else(|| "Licensing not configured".to_string())?;
+    // Read config and extract what we need without holding the lock
+    let (license_key, license_plan, fingerprint) = {
+        let config = state.config.read();
+        let key = config
+            .license_key
+            .clone()
+            .ok_or_else(|| "No license key saved".to_string())?;
+        let plan = config
+            .license_plan
+            .clone()
+            .unwrap_or_else(|| "Pro".to_string());
+        let fp = config.machine_id.clone();
+        (key, plan, fp)
+    }; // Lock is dropped here
 
-    let license_key = state
-        .config
-        .read()
-        .license_key
-        .clone()
-        .ok_or_else(|| "No license key saved".to_string())?;
+    // Return locally stored license info (don't fail if online validation fails)
+    // This ensures the UI shows the license even offline or if Keygen is unreachable
+    let local_status = LicenseStatus {
+        status: Some("Active".to_string()), // Assume active if we have a key
+        plan: Some(license_plan),
+        key: Some(license_key.clone()),
+        expires_at: None,      // Not stored locally
+        max_machines: Some(3), // Default from Keygen policy
+        machines_used: None,   // Not stored locally
+    };
 
-    let fingerprint = state.config.read().machine_id.clone();
+    // Try to validate online for fresh data, but don't fail if it doesn't work
+    let client = match state.keygen_client() {
+        Some(c) => c,
+        None => return Ok(local_status), // No client configured, return local info
+    };
 
-    let result = client
-        .validate_license(&license_key, &fingerprint)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(LicenseStatus {
-        status: result.license.status,
-        plan: result.license.plan,
-        key: Some(license_key),
-        expires_at: result.license.expires_at,
-        max_machines: result.license.max_machines,
-        machines_used: result.license.machines_used,
-    })
+    match client.validate_license(&license_key, &fingerprint).await {
+        Ok(result) => Ok(LicenseStatus {
+            status: result.license.status,
+            plan: result.license.plan,
+            key: Some(license_key),
+            expires_at: result.license.expires_at,
+            max_machines: result.license.max_machines,
+            machines_used: result.license.machines_used,
+        }),
+        Err(_) => Ok(local_status), // Validation failed, return local info
+    }
 }
 
 #[tauri::command]
