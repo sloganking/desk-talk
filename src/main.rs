@@ -334,6 +334,15 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // When a second instance is launched, bring the existing window to front
+            println!("Second instance detected - bringing existing window to front");
+            if let Some(window) = app.get_webview_window("settings") {
+                let _ = window.show();
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+            }
+        }))
         .manage(app_state)
         .manage(AppEngine {
             engine: Arc::new(Mutex::new(None)),
