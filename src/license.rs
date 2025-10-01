@@ -302,14 +302,24 @@ fn parse_validation_json(json: serde_json::Value) -> Result<ValidationResult> {
             })
             .and_then(|m| m.as_u64())
             .map(|v| v as u32),
-        machines_used: license_attributes
-            .and_then(|attrs| {
-                attrs
-                    .get("machinesInUse")
-                    .or_else(|| attrs.get("machines_used"))
-            })
-            .and_then(|m| m.as_u64())
-            .map(|v| v as u32),
+        machines_used: validation
+            .get("relationships")
+            .and_then(|r| r.get("machines"))
+            .and_then(|m| m.get("meta"))
+            .and_then(|meta| meta.get("count"))
+            .and_then(|c| c.as_u64())
+            .map(|v| v as u32)
+            .or_else(|| {
+                // Fallback to attributes if not in relationships
+                license_attributes
+                    .and_then(|attrs| {
+                        attrs
+                            .get("machinesInUse")
+                            .or_else(|| attrs.get("machines_used"))
+                    })
+                    .and_then(|m| m.as_u64())
+                    .map(|v| v as u32)
+            }),
         key,
     };
 

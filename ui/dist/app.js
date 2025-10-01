@@ -757,14 +757,16 @@ async function updateLicenseSection() {
     } else if (trialStatus && trialStatus.is_trial && trialStatus.expiration_date) {
         const date = new Date(trialStatus.expiration_date);
         expiresEl.textContent = date.toLocaleString();
+    } else if (licenseInfo.hasLicense) {
+        // Has license but no expiration date = never expires
+        expiresEl.textContent = 'Never';
     } else {
         expiresEl.textContent = '—';
     }
 
     const devicesEl = document.getElementById('licenseDevices');
-    if (licenseInfo.maxMachines != null) {
-        const used = licenseInfo.machinesUsed != null ? licenseInfo.machinesUsed : '?';
-        devicesEl.textContent = `${used} / ${licenseInfo.maxMachines}`;
+    if (licenseInfo.maxMachines != null && licenseInfo.machinesUsed != null) {
+        devicesEl.textContent = `${licenseInfo.machinesUsed} / ${licenseInfo.maxMachines}`;
     } else {
         devicesEl.textContent = '—';
     }
