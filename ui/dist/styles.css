@@ -439,3 +439,28 @@ body.dark-mode .info-icon {
 body.dark-mode .info-icon:hover {
     color: #8b9cf6;
 }
+
+/* License key toggle/copy buttons */
+.icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px 8px;
+    margin-left: 8px;
+    border-radius: 4px;
+    transition: background 0.2s;
+    vertical-align: middle;
+}
+
+.icon-btn:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.icon-btn:active {
+    transform: scale(0.95);
+}
+
+body.dark-mode .icon-btn:hover {
+    background: rgba(102, 126, 234, 0.2);
+}

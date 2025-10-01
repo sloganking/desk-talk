@@ -744,7 +744,13 @@ async function updateLicenseSection() {
     const keyRow = document.getElementById('licenseKeyRow');
     const keyDisplay = document.getElementById('licenseKeyDisplay');
     if (licenseInfo.key && licenseInfo.hasLicense) {
-        keyDisplay.textContent = licenseInfo.key;
+        // Show masked key by default (only last 4 characters visible)
+        if (!window.licenseKeyVisible) {
+            const maskedKey = '•'.repeat(Math.max(0, licenseInfo.key.length - 4)) + licenseInfo.key.slice(-4);
+            keyDisplay.textContent = maskedKey;
+        } else {
+            keyDisplay.textContent = licenseInfo.key;
+        }
         keyRow.style.display = 'block';
     } else {
         keyRow.style.display = 'none';
@@ -971,6 +977,9 @@ document.getElementById('deactivateLicenseBtn').addEventListener('click', async 
     }
 });
 
+// Initialize license key visibility state
+window.licenseKeyVisible = false;
+
 // Initialize
 console.log('App.js loaded, initializing...');
 document.addEventListener('DOMContentLoaded', () => {
@@ -979,6 +988,40 @@ document.addEventListener('DOMContentLoaded', () => {
         apiKeyInput.addEventListener('input', (event) => {
             cachedApiKey = event.target.value;
         }, { passive: true });
+    }
+
+    // License key toggle button
+    const toggleKeyBtn = document.getElementById('toggleKeyBtn');
+    if (toggleKeyBtn) {
+        toggleKeyBtn.addEventListener('click', () => {
+            window.licenseKeyVisible = !window.licenseKeyVisible;
+            toggleKeyBtn.textContent = window.licenseKeyVisible ? '🙈' : '👁️';
+            toggleKeyBtn.title = window.licenseKeyVisible ? 'Hide Key' : 'Show Key';
+            updateLicenseSection();
+        });
+    }
+
+    // License key copy button
+    const copyKeyBtn = document.getElementById('copyKeyBtn');
+    if (copyKeyBtn) {
+        copyKeyBtn.addEventListener('click', async () => {
+            if (licenseInfo.key) {
+                try {
+                    await navigator.clipboard.writeText(licenseInfo.key);
+                    const originalText = copyKeyBtn.textContent;
+                    copyKeyBtn.textContent = '✅';
+                    setTimeout(() => {
+                        copyKeyBtn.textContent = originalText;
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy license key:', err);
+                    copyKeyBtn.textContent = '❌';
+                    setTimeout(() => {
+                        copyKeyBtn.textContent = '📋';
+                    }, 2000);
+                }
+            }
+        });
     }
 
     (async () => {
