@@ -258,16 +258,38 @@ fn parse_validation_json(json: serde_json::Value) -> Result<ValidationResult> {
         .and_then(|k| k.as_str())
         .map(|s| s.to_string());
 
+    // Extract plan from policy relationship
+    let policy_id = validation
+        .get("relationships")
+        .and_then(|r| r.get("policy"))
+        .and_then(|p| p.get("data"))
+        .and_then(|d| d.get("id"))
+        .and_then(|id| id.as_str())
+        .map(|s| s.to_string());
+
+    // Determine plan name from policy (you can customize this logic)
+    let plan = if let Some(ref pid) = policy_id {
+        // Check if it contains "trial" or matches trial policy pattern
+        if pid.to_lowercase().contains("trial") {
+            Some("Trial".to_string())
+        } else {
+            Some("Pro".to_string())
+        }
+    } else {
+        // Fallback: try to get from attributes
+        license_attributes
+            .and_then(|attrs| attrs.get("plan"))
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string())
+    };
+
     let license = LicenseData {
         id: license_id.clone(),
         status: license_attributes
             .and_then(|attrs| attrs.get("status"))
             .and_then(|s| s.as_str())
             .map(|s| s.to_string()),
-        plan: license_attributes
-            .and_then(|attrs| attrs.get("plan"))
-            .and_then(|p| p.as_str())
-            .map(|s| s.to_string()),
+        plan,
         expires_at: license_attributes
             .and_then(|attrs| attrs.get("expiresAt").or_else(|| attrs.get("expires_at")))
             .and_then(|e| e.as_str())
