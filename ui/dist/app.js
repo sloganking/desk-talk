@@ -10,6 +10,7 @@ let cachedApiKey = '';
 let licenseInfo = {
     status: 'Unknown',
     plan: 'Unknown',
+    key: null,
     expiresAt: null,
     maxMachines: null,
     machinesUsed: null,
@@ -343,6 +344,7 @@ async function refreshLicenseStatus() {
         const status = await invoke('fetch_license_status');
         licenseInfo.status = status.status || 'Unknown';
         licenseInfo.plan = status.plan || 'Unknown';
+        licenseInfo.key = status.key || null;
         licenseInfo.expiresAt = status.expires_at || null;
         licenseInfo.maxMachines = status.max_machines || null;
         licenseInfo.machinesUsed = status.machines_used || null;
@@ -387,6 +389,15 @@ function updateLicenseSection() {
     document.getElementById('licenseStatus').textContent = licenseInfo.status;
     document.getElementById('licensePlan').textContent = licenseInfo.plan || 'Unknown';
 
+    const keyRow = document.getElementById('licenseKeyRow');
+    const keyDisplay = document.getElementById('licenseKeyDisplay');
+    if (licenseInfo.key && licenseInfo.hasLicense) {
+        keyDisplay.textContent = licenseInfo.key;
+        keyRow.style.display = 'block';
+    } else {
+        keyRow.style.display = 'none';
+    }
+
     const expiresEl = document.getElementById('licenseExpires');
     if (licenseInfo.expiresAt) {
         const date = new Date(licenseInfo.expiresAt);
@@ -404,18 +415,27 @@ function updateLicenseSection() {
     }
 
     const message = document.getElementById('licenseMessage');
+    const activateSection = document.querySelector('#license .section:nth-child(2)'); // Activate License section
+    const buySection = document.querySelector('#license .section:nth-child(3)'); // Buy License section
+    
     if (!licenseInfo.hasLicense) {
         message.textContent = 'Enter your license key to unlock DeskTalk Pro features.';
         message.classList.remove('success');
         message.classList.add('error');
+        if (activateSection) activateSection.style.display = 'block';
+        if (buySection) buySection.style.display = 'block';
     } else if (licenseInfo.status && licenseInfo.status.toLowerCase() === 'suspended') {
         message.textContent = 'License suspended. Contact support to restore access.';
         message.classList.remove('success');
         message.classList.add('error');
+        if (activateSection) activateSection.style.display = 'none';
+        if (buySection) buySection.style.display = 'block';
     } else {
         message.textContent = 'License active. Thank you for supporting DeskTalk!';
         message.classList.remove('error');
         message.classList.add('success');
+        if (activateSection) activateSection.style.display = 'none';
+        if (buySection) buySection.style.display = 'none';
     }
 }
 
@@ -460,9 +480,14 @@ setInterval(() => {
     if (statsTab && statsTab.classList.contains('active')) {
         loadStatistics();
     }
-    const licenseTab = document.getElementById('license');
-    if (licenseTab && licenseTab.classList.contains('active')) {
-        refreshLicenseStatus();
-    }
 }, 1500);
+
+// Load license status once when switching to License tab (not repeatedly)
+document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('click', () => {
+        if (button.dataset.tab === 'license') {
+            refreshLicenseStatus();
+        }
+    });
+});
 });

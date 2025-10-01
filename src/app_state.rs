@@ -22,26 +22,24 @@ pub struct Statistics {
 impl AppState {
     pub fn new(config: AppConfig, keygen_config: Option<KeygenConfig>) -> Self {
         let keygen_client = keygen_config
-            .and_then(|cfg| {
-                match KeygenClient::new(cfg) {
-                    Ok(client) => {
-                        println!("✓ Keygen client initialized");
-                        Some(client)
-                    }
-                    Err(e) => {
-                        println!("✗ Failed to create Keygen client: {}", e);
-                        None
-                    }
+            .and_then(|cfg| match KeygenClient::new(cfg) {
+                Ok(client) => {
+                    println!("✓ Keygen client initialized");
+                    Some(client)
+                }
+                Err(e) => {
+                    println!("✗ Failed to create Keygen client: {}", e);
+                    None
                 }
             })
             .map(Arc::new);
-        
+
         if keygen_client.is_some() {
             println!("✓ Licensing system ready");
         } else {
             println!("✗ Licensing system NOT available");
         }
-        
+
         Self {
             config: Arc::new(RwLock::new(config)),
             keygen: Arc::new(RwLock::new(keygen_client)),

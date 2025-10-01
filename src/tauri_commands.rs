@@ -9,6 +9,7 @@ use std::sync::Arc;
 pub struct LicenseStatus {
     pub status: Option<String>,
     pub plan: Option<String>,
+    pub key: Option<String>,
     pub expires_at: Option<String>,
     pub max_machines: Option<u32>,
     pub machines_used: Option<u32>,
@@ -143,6 +144,7 @@ pub async fn fetch_license_status(
     Ok(LicenseStatus {
         status: result.license.status,
         plan: result.license.plan,
+        key: Some(license_key),
         expires_at: result.license.expires_at,
         max_machines: result.license.max_machines,
         machines_used: result.license.machines_used,
@@ -175,12 +177,22 @@ pub async fn activate_license(
         let _machine = client
             .activate_machine(&license_key, &license_id, &fingerprint, &host_name)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                // Check if the error is about already being activated
+                let err_str = e.to_string();
+                if err_str.contains("FINGERPRINT_TAKEN")
+                    || err_str.contains("has already been taken")
+                {
+                    "This device has already been activated with this license.".to_string()
+                } else {
+                    err_str
+                }
+            })?;
     }
 
     {
         let mut config = state.config.write();
-        config.license_key = Some(license_key);
+        config.license_key = Some(license_key.clone());
         config.license_plan = validation.license.plan.clone();
         config.license_id = Some(license_id.clone());
         config.trial_started = false;
@@ -192,6 +204,7 @@ pub async fn activate_license(
     Ok(LicenseStatus {
         status: validation.license.status,
         plan: validation.license.plan,
+        key: Some(license_key),
         expires_at: validation.license.expires_at,
         max_machines: validation.license.max_machines,
         machines_used: validation.license.machines_used,
