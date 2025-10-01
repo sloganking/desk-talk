@@ -744,9 +744,9 @@ async function updateLicenseSection() {
     const keyRow = document.getElementById('licenseKeyRow');
     const keyDisplay = document.getElementById('licenseKeyDisplay');
     if (licenseInfo.key && licenseInfo.hasLicense) {
-        // Show masked key by default (only last 4 characters visible)
+        // Show masked key by default (only first 6 characters visible)
         if (!window.licenseKeyVisible) {
-            const maskedKey = '•'.repeat(Math.max(0, licenseInfo.key.length - 4)) + licenseInfo.key.slice(-4);
+            const maskedKey = licenseInfo.key.slice(0, 6) + '•'.repeat(Math.max(0, licenseInfo.key.length - 6));
             keyDisplay.textContent = maskedKey;
         } else {
             keyDisplay.textContent = licenseInfo.key;
