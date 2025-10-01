@@ -197,21 +197,29 @@ pub async fn activate_license(
 
     let license_id = validation.license.id.clone();
 
+    // Try to activate machine if not already activated
     if validation.machine.is_none() {
-        let _machine = client
+        match client
             .activate_machine(&license_key, &license_id, &fingerprint, &host_name)
             .await
-            .map_err(|e| {
+        {
+            Ok(_) => {
+                // Successfully activated
+            }
+            Err(e) => {
                 // Check if the error is about already being activated
                 let err_str = e.to_string();
                 if err_str.contains("FINGERPRINT_TAKEN")
                     || err_str.contains("has already been taken")
                 {
-                    "This device has already been activated with this license.".to_string()
+                    // This is fine - device was already activated, treat as success
+                    println!("Device already activated, continuing...");
                 } else {
-                    err_str
+                    // Other errors are actual failures
+                    return Err(err_str);
                 }
-            })?;
+            }
+        }
     }
 
     {
