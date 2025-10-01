@@ -19,6 +19,8 @@ use tempfile::tempdir;
 
 static TICK_BYTES: &[u8] = include_bytes!("../assets/tick.mp3");
 static FAILED_BYTES: &[u8] = include_bytes!("../assets/failed.mp3");
+static BEEP_LOW_BYTES: &[u8] = include_bytes!("../assets/beep_low.mp3");
+static BEEP_HIGH_BYTES: &[u8] = include_bytes!("../assets/beep.mp3");
 
 fn tick_loop(stop_rx: mpsc::Receiver<()>) {
     let tick_sink = DefaultDeviceSink::new();
@@ -57,6 +59,26 @@ fn play_failure_sound() {
         );
     }
     sink.sleep_until_end();
+}
+
+fn play_ptt_press_sound() {
+    thread::spawn(|| {
+        let sink = DefaultDeviceSink::new();
+        if let Ok(decoder) = Decoder::new(BufReader::new(Cursor::new(BEEP_LOW_BYTES))) {
+            sink.append(decoder);
+            sink.sleep_until_end();
+        }
+    });
+}
+
+fn play_ptt_release_sound() {
+    thread::spawn(|| {
+        let sink = DefaultDeviceSink::new();
+        if let Ok(decoder) = Decoder::new(BufReader::new(Cursor::new(BEEP_HIGH_BYTES))) {
+            sink.append(decoder);
+            sink.sleep_until_end();
+        }
+    });
 }
 
 fn capitalize_first_letter(s: &mut String) {
@@ -181,6 +203,7 @@ impl TranscriptionEngine {
                     if key == key_to_check && !key_pressed {
                         println!("PTT key pressed - starting recording");
                         key_pressed = true;
+                        play_ptt_press_sound(); // Play low beep
                         recording_start = std::time::SystemTime::now();
                         match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
                             Ok(_) => println!("Recording started successfully"),
@@ -195,6 +218,7 @@ impl TranscriptionEngine {
                     if key == key_to_check && key_pressed {
                         println!("PTT key released - stopping recording");
                         key_pressed = false;
+                        play_ptt_release_sound(); // Play high beep
 
                         let elapsed = match recording_start.elapsed() {
                             Ok(elapsed) => elapsed,
