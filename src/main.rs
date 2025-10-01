@@ -64,23 +64,28 @@ fn start_global_event_listener(app_state: AppState) {
         let mut ptt_key_pressed = false;
 
         let callback = move |event: Event| {
-            let running = app_state.is_running();
-
+            // Check if engine has an active event sender (fast, cached check)
             let sender_opt = app_state.event_sender();
-            if running {
+            let engine_ready = sender_opt.is_some();
+
+            // Forward events to engine if it's ready
+            if engine_ready {
                 if let Some(sender) = sender_opt {
                     let _ = sender.send(event.clone());
                 }
             }
 
-            // Track PTT key state and play error sound only on press (not while held)
+            // Track PTT key state and play error sound if engine is NOT ready
             if let Some(ptt_key) = app_state.config.read().get_ptt_key() {
                 match event.event_type {
                     EventType::KeyPress(key) => {
                         if key == ptt_key && !ptt_key_pressed {
                             ptt_key_pressed = true;
-                            if !running {
-                                println!("PTT pressed but engine is stopped - playing error sound");
+                            // If engine doesn't have a sender, it's not ready - play error immediately
+                            if !engine_ready {
+                                println!(
+                                    "PTT pressed but engine is NOT ready - playing error sound"
+                                );
                                 let _ = error_tx.send(()); // Non-blocking send to error sound thread
                             }
                         }

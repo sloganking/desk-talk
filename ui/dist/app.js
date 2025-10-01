@@ -342,6 +342,14 @@ async function saveConfig() {
                 console.log('API key test passed');
             } catch (error) {
                 console.error('API key test failed:', error);
+                try {
+                    const runningBeforeStop = await invoke('is_running');
+                    if (runningBeforeStop) {
+                        await invoke('stop_engine');
+                    }
+                } catch (stopError) {
+                    console.error('Failed to stop engine after API key test failure:', stopError);
+                }
                 await updateEngineStatus(false, error.toString());
                 showStatus('Settings saved, but API key is invalid: ' + error, 'error');
                 await invoke('save_config', { incoming: config });
