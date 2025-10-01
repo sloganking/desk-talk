@@ -91,6 +91,7 @@ async function loadConfig() {
     try {
         const config = await invoke('get_config');
         console.log('Loaded config from backend:', config);
+        console.log('Config.api_key:', config.api_key ? `EXISTS (${config.api_key.length} chars)` : 'MISSING');
         
         // General settings
         if (config.ptt_key) {
@@ -111,11 +112,13 @@ async function loadConfig() {
         document.getElementById('localSection').style.display = isLocal ? 'block' : 'none';
         
         const apiKeyField = document.getElementById('apiKey');
+        console.log('API key field element:', apiKeyField ? 'FOUND' : 'NOT FOUND');
         if (config.api_key) {
             cachedApiKey = config.api_key;
             apiKeyField.value = config.api_key;
             console.log('✓ API key loaded from backend (length:', config.api_key.length, ')');
-            console.log('✓ API key field updated:', apiKeyField.value ? 'YES' : 'NO');
+            console.log('✓ API key field value after set:', apiKeyField.value);
+            console.log('✓ API key field display:', apiKeyField.style.display);
         } else {
             console.warn('✗ No API key in loaded config');
             apiKeyField.value = ''; // Clear the field
@@ -496,6 +499,15 @@ if (detectKeyBtn) {
 document.getElementById('buyLicenseBtn').addEventListener('click', () => {
     // Will be replaced with actual purchase URL
     window.open('https://example.com/buy', '_blank');
+});
+
+document.getElementById('viewUsageBtn').addEventListener('click', async () => {
+    try {
+        await invoke('open_url', { url: 'https://platform.openai.com/usage' });
+    } catch (error) {
+        console.error('Failed to open URL:', error);
+        showStatus('Failed to open browser: ' + error, 'error');
+    }
 });
 
 // Initialize

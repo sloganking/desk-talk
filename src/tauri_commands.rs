@@ -242,3 +242,8 @@ pub async fn check_license_periodically(state: tauri::State<'_, AppState>) -> Re
     }
     Ok(())
 }
+
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), String> {
+    opener::open(&url).map_err(|e| format!("Failed to open URL: {}", e))
+}

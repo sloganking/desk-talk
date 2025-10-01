@@ -175,6 +175,10 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
 fn main() {
     // Load configuration
     let config = AppConfig::load().unwrap_or_default();
+    println!(
+        "Main: Initial config has API key: {}",
+        config.api_key.is_some()
+    );
     let keygen_config = match AppConfig::load_keygen_config() {
         Ok(cfg) => {
             println!("✓ Keygen config loaded successfully");
@@ -207,6 +211,7 @@ fn main() {
             tauri_commands::fetch_license_status,
             tauri_commands::activate_license,
             tauri_commands::check_license_periodically,
+            tauri_commands::open_url,
             start_engine,
             stop_engine,
         ])

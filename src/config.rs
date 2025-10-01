@@ -25,7 +25,7 @@ pub struct AppConfig {
     pub type_chars: bool,
     #[serde(default)]
     pub auto_start: bool,
-    #[serde(skip_serializing, default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license_key: Option<String>,
@@ -95,6 +95,13 @@ impl AppConfig {
 
         // Load API key from keyring
         config.api_key = Self::load_api_key().ok();
+        println!(
+            "Config loaded: api_key present = {}",
+            config.api_key.is_some()
+        );
+        if let Some(ref key) = config.api_key {
+            println!("  API key length: {}", key.len());
+        }
 
         Ok(config)
     }
