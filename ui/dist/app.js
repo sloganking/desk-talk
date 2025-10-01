@@ -17,6 +17,83 @@ let licenseInfo = {
     hasLicense: false,
 };
 let currentPttKey = null;
+let trialCountdownInterval = null;
+
+// Format time remaining in human-readable format
+function formatTimeRemaining(ms) {
+    if (ms <= 0) {
+        return 'Expired';
+    }
+
+    const seconds = Math.floor(ms / 1000);
+    const now = Math.floor(Date.now() / 1000);
+
+    // Compute target expiration Unix timestamp
+    const expirationUnix = now + seconds;
+
+    return invoke('format_trial_remaining', { expiration: new Date(expirationUnix * 1000).toISOString() })
+        .catch(err => {
+            console.warn('Failed to format trial remaining:', err);
+            // Fallback to manual formatting
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            const remainingHours = hours % 24;
+            const remainingMinutes = minutes % 60;
+            const remainingSeconds = seconds % 60;
+
+            const parts = [];
+            if (days > 0) parts.push(`${days}d`);
+            if (remainingHours > 0 || days > 0) parts.push(`${remainingHours}h`);
+            if (remainingMinutes > 0 || hours > 0) parts.push(`${remainingMinutes}m`);
+            parts.push(`${remainingSeconds}s`);
+
+            return parts.join(' ');
+        });
+}
+
+// Start live countdown for trial expiration
+function startTrialCountdown(expirationDate, element, initialText) {
+    // Stop existing countdown if any
+    stopTrialCountdown();
+    
+    const updateCountdown = () => {
+        const now = new Date().getTime();
+        const expiration = new Date(expirationDate).getTime();
+        const remaining = expiration - now;
+        
+        Promise.resolve(formatTimeRemaining(remaining)).then(text => {
+            element.textContent = text;
+        });
+        
+        // If expired, stop the countdown and refresh UI
+        if (remaining <= 0) {
+            stopTrialCountdown();
+            element.textContent = 'Expired';
+            // Refresh the entire license section to update status
+            setTimeout(() => updateLicenseSection(), 1000);
+        }
+    };
+    
+    // Update immediately
+    if (initialText) {
+        element.textContent = initialText;
+    } else {
+        updateCountdown();
+    }
+    
+    // Then update every second
+    trialCountdownInterval = setInterval(updateCountdown, 1000);
+}
+
+// Stop the trial countdown
+function stopTrialCountdown() {
+    if (trialCountdownInterval) {
+        clearInterval(trialCountdownInterval);
+        trialCountdownInterval = null;
+    }
+}
 
 function applyPttKeySelection() {
     if (!currentPttKey) {
@@ -651,13 +728,16 @@ async function updateLicenseSection() {
         document.getElementById('licensePlan').textContent = licenseInfo.plan || '—';
     }
     
-    // Show trial days remaining if in trial
+    // Show trial time remaining if in trial
     const trialDaysRow = document.getElementById('trialDaysRow');
     const trialDaysEl = document.getElementById('trialDaysRemaining');
-    if (trialStatus && trialStatus.is_trial && !licenseInfo.hasLicense) {
-        trialDaysEl.textContent = trialStatus.days_remaining;
+    if (trialStatus && trialStatus.is_trial && !licenseInfo.hasLicense && trialStatus.expiration_date) {
+        // Start live countdown
+        startTrialCountdown(trialStatus.expiration_date, trialDaysEl, trialStatus.human_remaining);
         trialDaysRow.style.display = 'block';
     } else {
+        // Stop countdown if it was running
+        stopTrialCountdown();
         trialDaysRow.style.display = 'none';
     }
 
@@ -712,7 +792,8 @@ async function updateLicenseSection() {
             message.classList.remove('success');
             message.classList.add('error');
         } else {
-            message.textContent = `Trial active! ${trialStatus.days_remaining} days remaining. Purchase a license for unlimited access.`;
+            const remainingText = trialStatus.human_remaining || 'Time remaining unknown';
+            message.textContent = `Trial active! ${remainingText} remaining. Purchase a license for unlimited access.`;
             message.classList.remove('error');
             message.classList.add('success');
         }

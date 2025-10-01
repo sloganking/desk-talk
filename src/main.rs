@@ -180,6 +180,7 @@ async fn start_engine<R: Runtime>(
                 days_remaining: 0,
                 expired: false,
                 expiration_date: None,
+                human_remaining: None,
             },
         );
         println!("Engine start check - has_license: {}, trial.is_trial: {}, trial.expired: {}, trial.days_remaining: {}",
@@ -397,6 +398,7 @@ fn main() {
             tauri_commands::open_url,
             tauri_commands::start_trial,
             tauri_commands::get_trial_status,
+            tauri_commands::format_trial_remaining,
             start_engine,
             stop_engine,
         ])

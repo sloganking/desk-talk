@@ -343,6 +343,7 @@ pub struct TrialStatus {
     pub days_remaining: i64,
     pub expired: bool,
     pub expiration_date: Option<String>,
+    pub human_remaining: Option<String>,
 }
 
 #[tauri::command]
@@ -387,6 +388,7 @@ pub fn start_trial(state: tauri::State<'_, AppState>) -> Result<TrialStatus, Str
         days_remaining: 7,
         expired: false,
         expiration_date: Some(expiration.to_rfc3339()),
+        human_remaining: Some(humanize_duration(Duration::days(7))),
     })
 }
 
@@ -406,6 +408,7 @@ fn get_trial_status_internal(config: &crate::config::AppConfig) -> Result<TrialS
             days_remaining: 0,
             expired: false,
             expiration_date: None,
+            human_remaining: None,
         });
     }
 
@@ -416,6 +419,7 @@ fn get_trial_status_internal(config: &crate::config::AppConfig) -> Result<TrialS
             days_remaining: 0,
             expired: false,
             expiration_date: None,
+            human_remaining: None,
         });
     }
 
@@ -426,7 +430,8 @@ fn get_trial_status_internal(config: &crate::config::AppConfig) -> Result<TrialS
         .with_timezone(&Utc);
 
     let now = Utc::now();
-    let days_remaining = (expiration - now).num_days();
+    let remaining_duration = expiration - now;
+    let days_remaining = remaining_duration.num_days();
     let expired = now >= expiration;
 
     Ok(TrialStatus {
@@ -434,5 +439,33 @@ fn get_trial_status_internal(config: &crate::config::AppConfig) -> Result<TrialS
         days_remaining: days_remaining.max(0),
         expired,
         expiration_date: Some(expiration_str.clone()),
+        human_remaining: if expired {
+            None
+        } else {
+            Some(humanize_duration(remaining_duration))
+        },
     })
+}
+
+fn humanize_duration(duration: chrono::Duration) -> String {
+    let secs = duration.num_seconds();
+    let secs = if secs <= 0 { 0 } else { secs as u64 };
+    humantime::format_duration(std::time::Duration::from_secs(secs)).to_string()
+}
+
+#[tauri::command]
+pub fn format_trial_remaining(expiration: String) -> Result<String, String> {
+    use chrono::{DateTime, Utc};
+
+    let expiration = DateTime::parse_from_rfc3339(&expiration)
+        .map_err(|e| format!("Invalid expiration date: {}", e))?
+        .with_timezone(&Utc);
+    let now = Utc::now();
+
+    if now >= expiration {
+        return Ok("Expired".to_string());
+    }
+
+    let remaining = expiration - now;
+    Ok(humanize_duration(remaining))
 }
