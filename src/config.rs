@@ -272,11 +272,20 @@ impl AppConfig {
             .parent()
             .context("Failed to get exe directory")?
             .to_path_buf();
+
+        // Priority order:
+        // 1. .env.licenses (full config with admin token - for dev/build machine)
+        // 2. .env.licenses.dist (minimal config - for customer distribution)
+
         let exe_env = exe_dir.join(".env.licenses");
+        let exe_env_dist = exe_dir.join(".env.licenses.dist");
 
         // Check exe directory first
         if exe_env.exists() {
             return Ok(exe_env);
+        }
+        if exe_env_dist.exists() {
+            return Ok(exe_env_dist);
         }
 
         // Fallback to workspace root for development
@@ -284,6 +293,10 @@ impl AppConfig {
             let workspace_env = current_dir.join(".env.licenses");
             if workspace_env.exists() {
                 return Ok(workspace_env);
+            }
+            let workspace_env_dist = current_dir.join(".env.licenses.dist");
+            if workspace_env_dist.exists() {
+                return Ok(workspace_env_dist);
             }
         }
 
@@ -305,15 +318,12 @@ impl AppConfig {
             product_id: lookup
                 .remove("KEYGEN_PRODUCT_ID")
                 .context("KEYGEN_PRODUCT_ID missing in .env.licenses")?,
-            policy_trial: lookup
-                .remove("KEYGEN_POLICY_TRIAL")
-                .context("KEYGEN_POLICY_TRIAL missing in .env.licenses")?,
-            policy_pro: lookup
-                .remove("KEYGEN_POLICY_PRO")
-                .context("KEYGEN_POLICY_PRO missing in .env.licenses")?,
-            admin_token: lookup
-                .remove("KEYGEN_ADMIN_TOKEN")
-                .context("KEYGEN_ADMIN_TOKEN missing in .env.licenses")?,
+            // Policy IDs are optional (only needed server-side for creating licenses)
+            policy_trial: lookup.remove("KEYGEN_POLICY_TRIAL"),
+            policy_pro: lookup.remove("KEYGEN_POLICY_PRO"),
+            // Admin token is optional (only needed server-side for creating licenses)
+            // NEVER distribute this to customers!
+            admin_token: lookup.remove("KEYGEN_ADMIN_TOKEN"),
             public_key_hex: lookup
                 .remove("KEYGEN_PUBLIC_KEY")
                 .context("KEYGEN_PUBLIC_KEY missing in .env.licenses")?,
@@ -325,8 +335,12 @@ impl AppConfig {
 pub struct KeygenConfig {
     pub account_id: String,
     pub product_id: String,
-    pub policy_trial: String,
-    pub policy_pro: String,
-    pub admin_token: String,
+    // Policy IDs are only needed for creating licenses (server-side)
+    // Not needed for client license validation
+    pub policy_trial: Option<String>,
+    pub policy_pro: Option<String>,
+    // Admin token is only needed for creating licenses (server-side)
+    // Should NEVER be distributed to customers!
+    pub admin_token: Option<String>,
     pub public_key_hex: String,
 }

@@ -52,12 +52,12 @@ impl KeygenClient {
         &self.config.product_id
     }
 
-    pub fn trial_policy(&self) -> &str {
-        &self.config.policy_trial
+    pub fn trial_policy(&self) -> Option<&str> {
+        self.config.policy_trial.as_deref()
     }
 
-    pub fn pro_policy(&self) -> &str {
-        &self.config.policy_pro
+    pub fn pro_policy(&self) -> Option<&str> {
+        self.config.policy_pro.as_deref()
     }
 
     pub async fn validate_license(

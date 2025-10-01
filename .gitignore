@@ -16,3 +16,4 @@ target/
 
 .env
 .env.licenses
+# .env.licenses.dist is intentionally tracked - it contains only public info
