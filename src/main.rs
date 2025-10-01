@@ -4,6 +4,7 @@
 mod app_state;
 mod config;
 mod easy_rdev_key;
+mod license;
 mod record;
 mod tauri_commands;
 mod transcribe;
@@ -174,7 +175,16 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
 fn main() {
     // Load configuration
     let config = AppConfig::load().unwrap_or_default();
-    let keygen_config = AppConfig::load_keygen_config().ok();
+    let keygen_config = match AppConfig::load_keygen_config() {
+        Ok(cfg) => {
+            println!("✓ Keygen config loaded successfully");
+            Some(cfg)
+        }
+        Err(e) => {
+            println!("✗ Failed to load Keygen config: {}", e);
+            None
+        }
+    };
     let app_state = AppState::new(config, keygen_config);
 
     tauri::Builder::default()
@@ -194,6 +204,9 @@ fn main() {
             tauri_commands::is_running,
             tauri_commands::validate_api_key,
             tauri_commands::detect_key_press,
+            tauri_commands::fetch_license_status,
+            tauri_commands::activate_license,
+            tauri_commands::check_license_periodically,
             start_engine,
             stop_engine,
         ])

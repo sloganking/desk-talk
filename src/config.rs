@@ -83,7 +83,12 @@ impl AppConfig {
         let mut config = if config_path.exists() {
             let contents =
                 fs::read_to_string(&config_path).context("Failed to read config file")?;
-            serde_json::from_str::<AppConfig>(&contents).context("Failed to parse config file")?
+            let mut cfg: AppConfig =
+                serde_json::from_str(&contents).context("Failed to parse config file")?;
+            if cfg.machine_id.is_empty() {
+                cfg.machine_id = AppConfig::default_machine_id();
+            }
+            cfg
         } else {
             AppConfig::default()
         };
@@ -254,7 +259,23 @@ impl AppConfig {
             .parent()
             .context("Failed to get exe directory")?
             .to_path_buf();
-        Ok(exe_dir.join(".env.licenses"))
+        let exe_env = exe_dir.join(".env.licenses");
+
+        // Check exe directory first
+        if exe_env.exists() {
+            return Ok(exe_env);
+        }
+
+        // Fallback to workspace root for development
+        if let Ok(current_dir) = std::env::current_dir() {
+            let workspace_env = current_dir.join(".env.licenses");
+            if workspace_env.exists() {
+                return Ok(workspace_env);
+            }
+        }
+
+        // Return exe path even if it doesn't exist (for better error message)
+        Ok(exe_env)
     }
 
     pub fn load_keygen_config() -> Result<KeygenConfig> {

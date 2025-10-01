@@ -7,6 +7,14 @@ if (!invoke) {
 }
 
 let cachedApiKey = '';
+let licenseInfo = {
+    status: 'Unknown',
+    plan: 'Unknown',
+    expiresAt: null,
+    maxMachines: null,
+    machinesUsed: null,
+    hasLicense: false,
+};
 let currentPttKey = null;
 
 function applyPttKeySelection() {
@@ -102,11 +110,14 @@ async function loadConfig() {
             document.getElementById('apiKey').value = config.api_key;
         }
 
-        const running = await invoke('is_running');
-        updateEngineButtons(running);
         if (config.local_model) {
             document.getElementById('localModel').value = config.local_model;
         }
+
+        await refreshLicenseStatus();
+
+        const running = await invoke('is_running');
+        updateEngineButtons(running);
         
         console.log('Configuration loaded:', config);
     } catch (error) {
@@ -327,12 +338,94 @@ function showStatus(message, type = '') {
     }, 5000);
 }
 
+async function refreshLicenseStatus() {
+    try {
+        const status = await invoke('fetch_license_status');
+        licenseInfo.status = status.status || 'Unknown';
+        licenseInfo.plan = status.plan || 'Unknown';
+        licenseInfo.expiresAt = status.expires_at || null;
+        licenseInfo.maxMachines = status.max_machines || null;
+        licenseInfo.machinesUsed = status.machines_used || null;
+        licenseInfo.hasLicense = true;
+        updateLicenseSection();
+    } catch (error) {
+        console.warn('License status unavailable:', error);
+        licenseInfo.status = 'Unlicensed';
+        licenseInfo.hasLicense = false;
+        updateLicenseSection();
+    }
+}
+
+async function activateLicense() {
+    const keyInput = document.getElementById('licenseKey');
+    const licenseKey = keyInput.value.trim();
+    if (!licenseKey) {
+        showStatus('Please enter a license key.', 'error');
+        return;
+    }
+
+    try {
+        showStatus('Activating license...', '');
+        const status = await invoke('activate_license', { licenseKey });
+        licenseInfo.status = status.status || 'Active';
+        licenseInfo.plan = status.plan || 'Pro';
+        licenseInfo.expiresAt = status.expires_at || null;
+        licenseInfo.maxMachines = status.max_machines || null;
+        licenseInfo.machinesUsed = status.machines_used || null;
+        licenseInfo.hasLicense = true;
+        updateLicenseSection();
+        showStatus('License activated successfully!', 'success');
+    } catch (error) {
+        console.error('Activation failed:', error);
+        showStatus('Activation failed: ' + error, 'error');
+        licenseInfo.hasLicense = false;
+        updateLicenseSection();
+    }
+}
+
+function updateLicenseSection() {
+    document.getElementById('licenseStatus').textContent = licenseInfo.status;
+    document.getElementById('licensePlan').textContent = licenseInfo.plan || 'Unknown';
+
+    const expiresEl = document.getElementById('licenseExpires');
+    if (licenseInfo.expiresAt) {
+        const date = new Date(licenseInfo.expiresAt);
+        expiresEl.textContent = date.toLocaleString();
+    } else {
+        expiresEl.textContent = '—';
+    }
+
+    const devicesEl = document.getElementById('licenseDevices');
+    if (licenseInfo.maxMachines != null) {
+        const used = licenseInfo.machinesUsed != null ? licenseInfo.machinesUsed : '?';
+        devicesEl.textContent = `${used} / ${licenseInfo.maxMachines}`;
+    } else {
+        devicesEl.textContent = '—';
+    }
+
+    const message = document.getElementById('licenseMessage');
+    if (!licenseInfo.hasLicense) {
+        message.textContent = 'Enter your license key to unlock DeskTalk Pro features.';
+        message.classList.remove('success');
+        message.classList.add('error');
+    } else if (licenseInfo.status && licenseInfo.status.toLowerCase() === 'suspended') {
+        message.textContent = 'License suspended. Contact support to restore access.';
+        message.classList.remove('success');
+        message.classList.add('error');
+    } else {
+        message.textContent = 'License active. Thank you for supporting DeskTalk!';
+        message.classList.remove('error');
+        message.classList.add('success');
+    }
+}
+
 // Event listeners
 document.getElementById('saveBtn').addEventListener('click', saveConfig);
 document.getElementById('startBtn').addEventListener('click', startTranscription);
 document.getElementById('stopBtn').addEventListener('click', stopTranscription);
 document.getElementById('validateKeyBtn').addEventListener('click', validateApiKey);
 document.getElementById('refreshDevicesBtn').addEventListener('click', loadAudioDevices);
+document.getElementById('activateLicenseBtn').addEventListener('click', activateLicense);
 
 // Only add listener if button exists (it's commented out in HTML)
 const detectKeyBtn = document.getElementById('detectKeyBtn');
@@ -366,6 +459,10 @@ setInterval(() => {
     const statsTab = document.getElementById('stats');
     if (statsTab && statsTab.classList.contains('active')) {
         loadStatistics();
+    }
+    const licenseTab = document.getElementById('license');
+    if (licenseTab && licenseTab.classList.contains('active')) {
+        refreshLicenseStatus();
     }
 }, 1500);
 });
