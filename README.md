@@ -1,13 +1,24 @@
 # desk-talk
- 
+
 Transcription for your desktop.
 
-A software that records what you say when you press a button down, and types what you said when you release it.
+A modern GUI application that records what you say when you press a button down, and types what you said when you release it.
 
 > [!IMPORTANT]
 > ⚠️ This video contains sound and is intended to be listened to with audio on. ⚠️
 
 https://github.com/sloganking/desk-talk/assets/16965931/e5da605b-3a9d-4394-b4ec-a3de65605a65
+
+## Features
+
+✨ **Push-to-Talk Transcription** - Hold a key, speak, release to paste  
+🎯 **System Tray Integration** - Runs quietly in the background  
+⚙️ **Modern GUI Settings** - Beautiful, easy-to-use configuration interface  
+📊 **WPM Statistics** - Track your words per minute with rolling averages  
+🔒 **Secure API Storage** - API keys stored safely in Windows Credential Manager  
+🎤 **Multiple Audio Devices** - Choose any microphone on your system  
+🌐 **OpenAI or Local** - Use OpenAI's Whisper API or run models locally  
+💾 **Persistent Settings** - All preferences saved between sessions
 
 ## Setup
 
@@ -15,65 +26,67 @@ Make sure [ffmpeg](https://www.ffmpeg.org/) is installed and added to your PATH
 
 ## Quickstart
 
-Assign your OpenAI API key to the `OPENAI_API_KEY` environment variable and run:
-
-```
-desk-talk --ptt-key scroll-lock
-```
-
-Or pass your OpenAI API key as a flag like so:
-
-```
-desk-talk --ptt-key scroll-lock --api-key [YOUR_API_KEY]
-```
-
-`desk-talk` will now record every time you hold down the ptt-key, and type what you spoke every time you release it.
+1. **Download and run** the latest release
+2. **Click the tray icon** in your system tray to open settings
+3. **Configure your settings:**
+   - Set your push-to-talk key (e.g., Scroll Lock)
+   - Choose your microphone
+   - Enter your OpenAI API key OR enable local transcription
+4. **Click "Start Transcription"**
+5. **Hold your PTT key, speak, and release!**
 
 > [!NOTE]
-> 
+>
 > You can manage your OpenAI API keys at https://platform.openai.com/api-keys
-## Other Usage
 
-### Special Keys
+## Using the GUI
 
-To find the name of a key by pressing it, run:
+### System Tray
 
-```
-desk-talk show-key-presses
-```
+- **Left-click** the tray icon to open the settings window
+- **Right-click** for quick Start/Stop/Quit options
 
-If your key shows as `Unknown(number)`, pass `number` to the `--special-ptt-key` flag like so:
+### Settings Tabs
 
-```
-desk-talk --special-ptt-key 125
-```
+**General Tab:**
 
-### Non-default recording device
+- Configure push-to-talk key
+- Select audio input device
+- Toggle capitalization and spacing options
+- Choose between paste mode (default) or typing mode
 
-To use a microphone other than the system default, run
+**Transcription Tab:**
 
+- **OpenAI Mode:** Enter your API key for cloud transcription
+- **Local Mode:** Download and run Whisper models on your computer
+  - Available models: `tiny-en`, `tiny`, `base-en`, `base`, `small-en`, `small`, `medium-en`, `medium`, `large-v1`, `large-v2`, `large-v3`
+  - Larger models = better accuracy but slower processing
 
-```
-desk-talk list-devices
-```
+**Statistics Tab:**
 
-to get a list of system microphone names. And pass the desired microphone name to ``--device`` like so:
+- View your current words per minute
+- Track rolling average WPM (last 1000 samples)
+- Monitor total words transcribed
+- See total recording time
 
+### WPM Display
 
-```
-desk-talk --ptt-key scroll-lock --device "Microphone (3- USB Audio Device)"
-```
-
-### Local transcription
-
-To run transcription locally without the OpenAI API, specify a model size with
-`--model` and pass the `--local` flag:
+After each transcription, the console displays:
 
 ```
-desk-talk --ptt-key scroll-lock --local --model tiny
+WPM: 132.4 (27 words over 12.25s) | Avg: 118.7
 ```
 
-Available models include `tiny`, `base`, `small`, `medium`, and the large
-variants `large-v1`, `large-v2`, or `large-v3`.
+- **Current WPM** - Speed of this transcription
+- **Word count** - Number of words spoken
+- **Duration** - Time from key press to release
+- **Rolling average** - Average of your last 1000 transcriptions
 
+## Building from Source
 
+```bash
+# Install Rust and dependencies
+cargo build --release
+
+# The executable will be in target/release/desk-talk.exe
+```
