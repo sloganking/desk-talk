@@ -404,15 +404,32 @@ async function activateLicense() {
         const status = await invoke('activate_license', { licenseKey });
         licenseInfo.status = status.status || 'Active';
         licenseInfo.plan = status.plan || 'Pro';
+        licenseInfo.key = status.key || licenseKey;
         licenseInfo.expiresAt = status.expires_at || null;
         licenseInfo.maxMachines = status.max_machines || null;
         licenseInfo.machinesUsed = status.machines_used || null;
         licenseInfo.hasLicense = true;
         updateLicenseSection();
         showStatus('License activated successfully!', 'success');
+        keyInput.value = ''; // Clear the input field after success
     } catch (error) {
         console.error('Activation failed:', error);
-        showStatus('Activation failed: ' + error, 'error');
+        // Show more specific error messages
+        let errorMsg = 'Activation failed: ';
+        if (error.toString().includes('Invalid license key')) {
+            errorMsg += 'Invalid license key';
+        } else if (error.toString().includes('not found')) {
+            errorMsg += 'License key not found';
+        } else if (error.toString().includes('suspended')) {
+            errorMsg += 'License suspended';
+        } else if (error.toString().includes('expired')) {
+            errorMsg += 'License expired';
+        } else if (error.toString().includes('max machines')) {
+            errorMsg += 'Maximum devices reached';
+        } else {
+            errorMsg += error.toString();
+        }
+        showStatus(errorMsg, 'error');
         licenseInfo.hasLicense = false;
         updateLicenseSection();
     }
