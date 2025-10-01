@@ -25,6 +25,8 @@ pub struct AppConfig {
     pub type_chars: bool,
     #[serde(default)]
     pub auto_start: bool,
+    #[serde(default)]
+    pub start_minimized: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,6 +55,7 @@ impl Default for AppConfig {
             space: false,
             type_chars: false,
             auto_start: false,
+            start_minimized: false,
             api_key: None,
             license_key: None,
             license_plan: None,

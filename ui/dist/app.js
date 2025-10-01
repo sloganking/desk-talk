@@ -103,6 +103,7 @@ async function loadConfig() {
         document.getElementById('space').checked = config.space || false;
         document.getElementById('typeChars').checked = config.type_chars || false;
         document.getElementById('autoStart').checked = config.auto_start || false;
+        document.getElementById('startMinimized').checked = config.start_minimized || false;
         
         // Transcription settings
         const isLocal = config.use_local || false;
@@ -239,6 +240,7 @@ async function saveConfig() {
             space: document.getElementById('space').checked,
             type_chars: document.getElementById('typeChars').checked,
             auto_start: document.getElementById('autoStart').checked,
+            start_minimized: document.getElementById('startMinimized').checked,
             api_key: apiKey || null,
             // These fields are managed by backend, send null/default so serde doesn't fail
             license_key: null,

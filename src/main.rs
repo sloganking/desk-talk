@@ -249,6 +249,16 @@ fn main() {
                         let _ = window_handle.hide();
                     }
                 });
+
+                // Check if we should start minimized
+                let state = app.state::<AppState>();
+                let should_minimize = state.config.read().start_minimized;
+                if should_minimize {
+                    let _ = window.hide();
+                    println!("Starting minimized to tray");
+                } else {
+                    println!("Starting with window visible");
+                }
             }
 
             // Attempt to auto-start transcription if configuration is ready
