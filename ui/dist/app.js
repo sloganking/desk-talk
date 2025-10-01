@@ -504,8 +504,7 @@ if (detectKeyBtn) {
 
 document.getElementById('buyLicenseBtn').addEventListener('click', async () => {
     try {
-        // TODO: Replace with actual purchase URL when set up
-        await invoke('open_url', { url: 'https://example.com/buy-desktalk' });
+        await invoke('open_url', { url: 'https://buy.stripe.com/5kQcMY0s96f051Lg7U0sU01' });
     } catch (error) {
         console.error('Failed to open purchase page:', error);
         showStatus('Failed to open purchase page', 'error');
