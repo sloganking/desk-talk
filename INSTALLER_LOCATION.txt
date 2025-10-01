@@ -3,7 +3,7 @@
 ================================================================================
 
 📦 INSTALLER FILE:
-  target\release\bundle\nsis\DeskTalk_0.3.0_x64-setup.exe
+  target\release\bundle\nsis\DeskTalk_0.4.0_x64-setup.exe
 
 📏 SIZE:
   ~4.3 MB
