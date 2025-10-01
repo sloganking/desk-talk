@@ -210,6 +210,7 @@ fn main() {
             tauri_commands::detect_key_press,
             tauri_commands::fetch_license_status,
             tauri_commands::activate_license,
+            tauri_commands::deactivate_license,
             tauri_commands::check_license_periodically,
             tauri_commands::open_url,
             start_engine,

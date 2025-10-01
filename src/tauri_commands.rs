@@ -247,3 +247,19 @@ pub async fn check_license_periodically(state: tauri::State<'_, AppState>) -> Re
 pub async fn open_url(url: String) -> Result<(), String> {
     opener::open(&url).map_err(|e| format!("Failed to open URL: {}", e))
 }
+
+#[tauri::command]
+pub async fn deactivate_license(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    {
+        let mut config = state.config.write();
+        config.license_key = None;
+        config.license_plan = None;
+        config.license_id = None;
+        config.trial_expiration = None;
+        config.trial_started = false;
+        config
+            .save()
+            .map_err(|e| format!("Failed to save config: {}", e))?;
+    }
+    Ok(())
+}

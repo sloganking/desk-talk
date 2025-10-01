@@ -457,6 +457,7 @@ function updateLicenseSection() {
     const message = document.getElementById('licenseMessage');
     const activateSection = document.querySelector('#license .section:nth-child(2)'); // Activate License section
     const buySection = document.querySelector('#license .section:nth-child(3)'); // Buy License section
+    const deactivateSection = document.getElementById('deactivateSection');
     
     if (!licenseInfo.hasLicense) {
         message.textContent = 'Enter your license key to unlock DeskTalk Pro features.';
@@ -464,18 +465,21 @@ function updateLicenseSection() {
         message.classList.add('error');
         if (activateSection) activateSection.style.display = 'block';
         if (buySection) buySection.style.display = 'block';
+        if (deactivateSection) deactivateSection.style.display = 'none';
     } else if (licenseInfo.status && licenseInfo.status.toLowerCase() === 'suspended') {
         message.textContent = 'License suspended. Contact support to restore access.';
         message.classList.remove('success');
         message.classList.add('error');
         if (activateSection) activateSection.style.display = 'none';
         if (buySection) buySection.style.display = 'block';
+        if (deactivateSection) deactivateSection.style.display = 'block';
     } else {
         message.textContent = 'License active. Thank you for supporting DeskTalk!';
         message.classList.remove('error');
         message.classList.add('success');
         if (activateSection) activateSection.style.display = 'none';
         if (buySection) buySection.style.display = 'none';
+        if (deactivateSection) deactivateSection.style.display = 'block';
     }
 }
 
@@ -496,9 +500,14 @@ if (detectKeyBtn) {
     detectKeyBtn.addEventListener('click', detectKeyPress);
 }
 
-document.getElementById('buyLicenseBtn').addEventListener('click', () => {
-    // Will be replaced with actual purchase URL
-    window.open('https://example.com/buy', '_blank');
+document.getElementById('buyLicenseBtn').addEventListener('click', async () => {
+    try {
+        // TODO: Replace with actual purchase URL when set up
+        await invoke('open_url', { url: 'https://example.com/buy-desktalk' });
+    } catch (error) {
+        console.error('Failed to open purchase page:', error);
+        showStatus('Failed to open purchase page', 'error');
+    }
 });
 
 document.getElementById('viewUsageBtn').addEventListener('click', async () => {
@@ -507,6 +516,27 @@ document.getElementById('viewUsageBtn').addEventListener('click', async () => {
     } catch (error) {
         console.error('Failed to open URL:', error);
         showStatus('Failed to open browser: ' + error, 'error');
+    }
+});
+
+document.getElementById('deactivateLicenseBtn').addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to deactivate this license from this device?')) {
+        return;
+    }
+    try {
+        await invoke('deactivate_license');
+        licenseInfo.hasLicense = false;
+        licenseInfo.status = 'Unlicensed';
+        licenseInfo.plan = 'Unknown';
+        licenseInfo.key = null;
+        licenseInfo.expiresAt = null;
+        licenseInfo.maxMachines = null;
+        licenseInfo.machinesUsed = null;
+        updateLicenseSection();
+        showStatus('License deactivated successfully!', 'success');
+    } catch (error) {
+        console.error('Failed to deactivate license:', error);
+        showStatus('Failed to deactivate license: ' + error, 'error');
     }
 });
 
