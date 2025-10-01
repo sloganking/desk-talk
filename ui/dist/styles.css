@@ -54,19 +54,33 @@ header h1 {
 }
 
 .status-badge.active {
-    background-color: #10b981;
+    background-color: #10b981; /* Green */
+    color: white;
+}
+
+.status-badge.trial {
+    background-color: #3b82f6; /* Blue */
     color: white;
 }
 
 .status-badge.suspended,
 .status-badge.expired {
-    background-color: #ef4444;
+    background-color: #ef4444; /* Red */
     color: white;
 }
 
-.status-badge.inactive,
+.status-badge.inactive {
+    background-color: #f59e0b; /* Orange/Yellow */
+    color: white;
+}
+
+.status-badge.unlicensed {
+    background-color: #6b7280; /* Gray */
+    color: white;
+}
+
 .status-badge.unknown {
-    background-color: #f59e0b;
+    background-color: #9ca3af; /* Light Gray */
     color: white;
 }
 
