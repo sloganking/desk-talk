@@ -146,6 +146,14 @@ async function loadConfig() {
         document.getElementById('typeChars').checked = config.type_chars || false;
         document.getElementById('autoStart').checked = config.auto_start || false;
         document.getElementById('startMinimized').checked = config.start_minimized || false;
+        document.getElementById('darkMode').checked = config.dark_mode || false;
+        
+        // Apply dark mode immediately
+        if (config.dark_mode) {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
         
         // Transcription settings
         const isLocal = config.use_local || false;
@@ -264,6 +272,7 @@ async function saveConfig() {
                 type_chars: document.getElementById('typeChars').checked,
                 auto_start: document.getElementById('autoStart').checked,
                 start_minimized: document.getElementById('startMinimized').checked,
+                dark_mode: document.getElementById('darkMode').checked,
                 api_key: document.getElementById('apiKey').value || cachedApiKey || null,
                 license_key: null,
                 license_plan: null,
@@ -312,6 +321,7 @@ async function saveConfig() {
             type_chars: document.getElementById('typeChars').checked,
             auto_start: document.getElementById('autoStart').checked,
             start_minimized: document.getElementById('startMinimized').checked,
+            dark_mode: document.getElementById('darkMode').checked,
             api_key: apiKey || null,
             // These fields are managed by backend, send null/default so serde doesn't fail
             license_key: null,
@@ -639,6 +649,15 @@ function updateLicenseSection() {
         if (deactivateSection) deactivateSection.style.display = 'block';
     }
 }
+
+// Dark mode toggle
+document.getElementById('darkMode').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        document.body.classList.add('dark-mode');
+    } else {
+        document.body.classList.remove('dark-mode');
+    }
+});
 
 // Event listeners
 document.getElementById('saveBtn').addEventListener('click', saveConfig);
