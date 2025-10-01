@@ -315,8 +315,7 @@ async function startTranscription() {
         }
         
         await invoke('start_engine');
-        document.getElementById('startBtn').style.display = 'none';
-        document.getElementById('stopBtn').style.display = 'inline-block';
+        updateEngineButtons(true);
         showStatus('Transcription started! Hold your PTT key to record.', 'success');
     } catch (error) {
         showStatus('Error starting transcription: ' + error, 'error');
@@ -327,8 +326,7 @@ async function startTranscription() {
 async function stopTranscription() {
     try {
         await invoke('stop_engine');
-        document.getElementById('startBtn').style.display = 'inline-block';
-        document.getElementById('stopBtn').style.display = 'none';
+        updateEngineButtons(false);
         showStatus('Transcription stopped', 'success');
     } catch (error) {
         showStatus('Error stopping transcription: ' + error, 'error');
