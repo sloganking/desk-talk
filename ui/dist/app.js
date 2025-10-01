@@ -39,18 +39,22 @@ function applyPttKeySelection() {
 }
 
 function updateEngineButtons(isRunning) {
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    if (!startBtn || !stopBtn) {
-        return;
-    }
-    if (isRunning) {
-        startBtn.style.display = 'none';
-        stopBtn.style.display = 'inline-block';
-    } else {
-        startBtn.style.display = 'inline-block';
-        stopBtn.style.display = 'none';
-    }
+    const buttons = [
+        { start: document.getElementById('startBtn'), stop: document.getElementById('stopBtn') },
+        { start: document.getElementById('startBtn2'), stop: document.getElementById('stopBtn2') }
+    ];
+    
+    buttons.forEach(btnSet => {
+        if (btnSet.start && btnSet.stop) {
+            if (isRunning) {
+                btnSet.start.style.display = 'none';
+                btnSet.stop.style.display = 'inline-block';
+            } else {
+                btnSet.start.style.display = 'inline-block';
+                btnSet.stop.style.display = 'none';
+            }
+        }
+    });
 }
 
 // Tab switching
@@ -344,11 +348,22 @@ async function validateApiKey() {
 // Show status message
 function showStatus(message, type = '') {
     const statusEl = document.getElementById('status');
-    statusEl.textContent = message;
-    statusEl.className = 'status ' + type;
+    const statusEl2 = document.getElementById('status2');
+    
+    [statusEl, statusEl2].forEach(el => {
+        if (el) {
+            el.textContent = message;
+            el.className = 'status ' + type;
+        }
+    });
+    
     setTimeout(() => {
-        statusEl.textContent = '';
-        statusEl.className = 'status';
+        [statusEl, statusEl2].forEach(el => {
+            if (el) {
+                el.textContent = '';
+                el.className = 'status';
+            }
+        });
     }, 5000);
 }
 
@@ -463,8 +478,11 @@ function updateLicenseSection() {
 
 // Event listeners
 document.getElementById('saveBtn').addEventListener('click', saveConfig);
+document.getElementById('saveBtn2').addEventListener('click', saveConfig);
 document.getElementById('startBtn').addEventListener('click', startTranscription);
+document.getElementById('startBtn2').addEventListener('click', startTranscription);
 document.getElementById('stopBtn').addEventListener('click', stopTranscription);
+document.getElementById('stopBtn2').addEventListener('click', stopTranscription);
 document.getElementById('validateKeyBtn').addEventListener('click', validateApiKey);
 document.getElementById('refreshDevicesBtn').addEventListener('click', loadAudioDevices);
 document.getElementById('activateLicenseBtn').addEventListener('click', activateLicense);

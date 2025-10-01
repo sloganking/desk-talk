@@ -58,6 +58,13 @@
                     <span>Start with Windows</span>
                 </label>
             </div>
+            
+            <footer>
+                <button id="saveBtn" class="btn btn-primary">Save Settings</button>
+                <button id="startBtn" class="btn btn-success">Start Transcription</button>
+                <button id="stopBtn" class="btn btn-danger" style="display: none;">Stop Transcription</button>
+                <div class="status" id="status"></div>
+            </footer>
         </div>
 
         <!-- Transcription Tab -->
@@ -97,6 +104,13 @@
                 </select>
                 <p class="hint">Models will be downloaded on first use</p>
             </div>
+            
+            <footer>
+                <button id="saveBtn2" class="btn btn-primary">Save Settings</button>
+                <button id="startBtn2" class="btn btn-success">Start Transcription</button>
+                <button id="stopBtn2" class="btn btn-danger" style="display: none;">Stop Transcription</button>
+                <div class="status" id="status2"></div>
+            </footer>
         </div>
 
         <!-- Statistics Tab -->
@@ -145,13 +159,6 @@
                 <button id="buyLicenseBtn" class="btn btn-success">Buy License</button>
             </div>
         </div>
-
-        <footer>
-            <button id="saveBtn" class="btn btn-primary">Save Settings</button>
-            <button id="startBtn" class="btn btn-success">Start Transcription</button>
-            <button id="stopBtn" class="btn btn-danger" style="display: none;">Stop Transcription</button>
-            <div class="status" id="status"></div>
-        </footer>
     </div>
 
     <script type="module">
