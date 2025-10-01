@@ -136,7 +136,7 @@ impl AppConfig {
         Ok(())
     }
 
-    fn load_api_key() -> Result<String> {
+    pub fn load_api_key() -> Result<String> {
         // Try keyring first
         if let Ok(entry) = keyring::Entry::new("desk-talk", "openai-api-key") {
             if let Ok(key) = entry.get_password() {
@@ -148,7 +148,7 @@ impl AppConfig {
         Self::load_api_key_from_env()
     }
 
-    fn save_api_key(api_key: &str) -> Result<()> {
+    pub fn save_api_key(api_key: &str) -> Result<()> {
         let entry = keyring::Entry::new("desk-talk", "openai-api-key")
             .context("Failed to create keyring entry")?;
         entry

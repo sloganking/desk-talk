@@ -37,6 +37,32 @@ header h1 {
     font-size: 14px;
 }
 
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.active {
+    background-color: #10b981;
+    color: white;
+}
+
+.status-badge.suspended,
+.status-badge.expired {
+    background-color: #ef4444;
+    color: white;
+}
+
+.status-badge.inactive,
+.status-badge.unknown {
+    background-color: #f59e0b;
+    color: white;
+}
+
 .tabs {
     display: flex;
     background: #f5f7fa;

@@ -17,7 +17,12 @@ pub struct LicenseStatus {
 
 #[tauri::command]
 pub fn get_config(state: tauri::State<AppState>) -> Result<AppConfig, String> {
-    Ok(state.config.read().clone())
+    let config = state.config.read().clone();
+    println!("get_config: api_key present: {}", config.api_key.is_some());
+    if let Some(ref key) = config.api_key {
+        println!("get_config: api_key length: {}", key.len());
+    }
+    Ok(config)
 }
 
 #[tauri::command]
@@ -29,13 +34,25 @@ pub fn save_config(state: tauri::State<AppState>, mut incoming: AppConfig) -> Re
 
     {
         let mut current = state.config.write();
-        // Preserve licensing-related fields and machine fingerprint
+        // Preserve licensing-related fields, machine fingerprint, AND api_key
         let license_key = current.license_key.clone();
         let license_plan = current.license_plan.clone();
         let license_id = current.license_id.clone();
         let trial_expiration = current.trial_expiration.clone();
         let trial_started = current.trial_started;
         let machine_id = current.machine_id.clone();
+
+        // If incoming has an API key, save it to keyring/env
+        if let Some(ref api_key) = incoming.api_key {
+            if !api_key.is_empty() {
+                println!("Saving new API key to keyring/env...");
+                AppConfig::save_api_key(api_key).map_err(|e| {
+                    println!("ERROR saving API key: {}", e);
+                    e.to_string()
+                })?;
+                println!("API key saved successfully");
+            }
+        }
 
         incoming.license_key = license_key;
         incoming.license_plan = license_plan;
@@ -49,6 +66,13 @@ pub fn save_config(state: tauri::State<AppState>, mut incoming: AppConfig) -> Re
             println!("ERROR saving config: {}", e);
             e.to_string()
         })?;
+
+        // Reload API key from keyring/env back into memory
+        current.api_key = AppConfig::load_api_key().ok();
+        println!(
+            "API key reloaded from keyring/env: {}",
+            current.api_key.is_some()
+        );
     }
 
     // reload keygen client in state after saving (e.g. if .env.licenses added later)

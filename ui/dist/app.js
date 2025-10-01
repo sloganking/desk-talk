@@ -106,9 +106,15 @@ async function loadConfig() {
         document.getElementById('openaiSection').style.display = isLocal ? 'none' : 'block';
         document.getElementById('localSection').style.display = isLocal ? 'block' : 'none';
         
+        const apiKeyField = document.getElementById('apiKey');
         if (config.api_key) {
             cachedApiKey = config.api_key;
-            document.getElementById('apiKey').value = config.api_key;
+            apiKeyField.value = config.api_key;
+            console.log('✓ API key loaded from backend (length:', config.api_key.length, ')');
+            console.log('✓ API key field updated:', apiKeyField.value ? 'YES' : 'NO');
+        } else {
+            console.warn('✗ No API key in loaded config');
+            apiKeyField.value = ''; // Clear the field
         }
 
         if (config.local_model) {
@@ -227,11 +233,18 @@ async function saveConfig() {
             type_chars: document.getElementById('typeChars').checked,
             auto_start: document.getElementById('autoStart').checked,
             api_key: apiKey || null,
+            // These fields are managed by backend, send null/default so serde doesn't fail
+            license_key: null,
+            license_plan: null,
+            license_id: null,
+            trial_expiration: null,
+            trial_started: false,
+            machine_id: "", // Backend will preserve the real value
         };
         
         console.log('Config payload being sent:', JSON.stringify({ ...config, api_key: apiKey ? '(hidden)' : null }, null, 2));
         
-        await invoke('save_config', { config });
+        await invoke('save_config', { incoming: config });
         showStatus('Settings saved successfully!', 'success');
         return true;
     } catch (error) {
@@ -386,7 +399,16 @@ async function activateLicense() {
 }
 
 function updateLicenseSection() {
-    document.getElementById('licenseStatus').textContent = licenseInfo.status;
+    const statusEl = document.getElementById('licenseStatus');
+    const status = (licenseInfo.status || 'Unknown').toLowerCase();
+    
+    // Clear and create badge
+    statusEl.innerHTML = '';
+    const badge = document.createElement('span');
+    badge.className = `status-badge ${status}`;
+    badge.textContent = licenseInfo.status || 'Unknown';
+    statusEl.appendChild(badge);
+    
     document.getElementById('licensePlan').textContent = licenseInfo.plan || 'Unknown';
 
     const keyRow = document.getElementById('licenseKeyRow');
