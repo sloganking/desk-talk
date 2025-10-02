@@ -1047,3 +1047,8 @@ document.querySelectorAll('.tab-button').forEach(button => {
     });
 });
 });
+
+// NOTE: PTT doesn't work when DeskTalk window is focused - this is a Windows limitation
+// ALL global hotkey apps have this same behavior (Discord, OBS, etc.)
+// Solution: Minimize DeskTalk after starting transcription, use PTT in other apps
+// The settings window is just for configuration, not active use
