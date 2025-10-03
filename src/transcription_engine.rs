@@ -187,6 +187,7 @@ impl TranscriptionEngine {
         let mut recording_start = std::time::SystemTime::now();
         let mut key_pressed = false;
         let key_to_check = opt.get_ptt_key().unwrap();
+        let mut last_trial_check = std::time::Instant::now();
 
         println!(
             "Key handler thread started, waiting for PTT key: {:?}",
@@ -197,6 +198,25 @@ impl TranscriptionEngine {
             if *stop_signal.lock() {
                 println!("Stop signal received - shutting down key handler");
                 break;
+            }
+
+            // Check trial expiration every 5 seconds
+            if last_trial_check.elapsed() > Duration::from_secs(5) {
+                last_trial_check = std::time::Instant::now();
+
+                // Check if trial has expired while running
+                let trial_status =
+                    crate::tauri_commands::get_trial_status_internal(&app_state.config.read());
+                if let Ok(status) = trial_status {
+                    if status.is_trial && status.expired {
+                        println!("Trial expired during session - stopping transcription engine");
+                        play_failure_sound();
+                        *stop_signal.lock() = true;
+                        app_state.stop_transcription();
+                        app_state.clear_event_sender();
+                        break;
+                    }
+                }
             }
             match event.event_type {
                 rdev::EventType::KeyPress(key) => {

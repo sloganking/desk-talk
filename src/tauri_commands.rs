@@ -398,7 +398,7 @@ pub fn get_trial_status(state: tauri::State<'_, AppState>) -> Result<TrialStatus
     get_trial_status_internal(&config)
 }
 
-fn get_trial_status_internal(config: &crate::config::AppConfig) -> Result<TrialStatus, String> {
+pub fn get_trial_status_internal(config: &crate::config::AppConfig) -> Result<TrialStatus, String> {
     use chrono::{DateTime, Utc};
 
     // If has license key, not in trial
