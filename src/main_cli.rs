@@ -59,6 +59,10 @@ struct Opt {
     #[arg(short, long)]
     space: bool,
 
+    /// If the transcription has no sentence punctuation, fix it with an LLM.
+    #[arg(long)]
+    punctuation: bool,
+
     /// Passing this flag will emulate the keyboard for typing the characters, instead of pressing Ctrl-V and pasting the text, which is the default behavior.
     /// This may be needed to pass text to a terminal, which would not accept pasting or something else.
     #[arg(short, long)]
@@ -121,6 +125,10 @@ fn capitalize_first_letter(s: &mut String) {
         let first_char_len = f.len_utf8();
         s.replace_range(0..first_char_len, &uppercase);
     }
+}
+
+fn needs_punctuation_fix(text: &str) -> bool {
+    !text.chars().any(|c| matches!(c, '.' | '!' | '?'))
 }
 
 fn truncate_to_secs(d: Duration) -> Duration {
@@ -270,6 +278,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 const WPM_ROLLING_MAX: usize = 1000;
                 let mut total_words_transcribed: usize = 0;
                 let mut total_recording_duration: Duration = Duration::from_secs(0);
+                let mut total_transcriptions: usize = 0;
+                let mut no_punctuation_count: usize = 0;
 
                 let tmp_dir = tempdir().unwrap();
                 // println!("{:?}", tmp_dir.path());
@@ -356,8 +366,54 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
 
-                                    // Transctiption post processing
+                                    // Transcription post processing
                                     {
+                                        transcription = transcription.replace("...", "");
+
+                                        let missing_punctuation =
+                                            needs_punctuation_fix(&transcription);
+                                        total_transcriptions += 1;
+                                        if missing_punctuation {
+                                            no_punctuation_count += 1;
+                                        }
+                                        let no_punct_pct = if total_transcriptions > 0 {
+                                            (no_punctuation_count as f64)
+                                                * 100.0
+                                                / (total_transcriptions as f64)
+                                        } else {
+                                            0.0
+                                        };
+                                        println!(
+                                            "No-punctuation rate: {:.1}% ({}/{})",
+                                            no_punct_pct, no_punctuation_count, total_transcriptions
+                                        );
+
+                                        if opt.punctuation && missing_punctuation {
+                                            if env::var("OPENAI_API_KEY").is_err() {
+                                                println!(
+                                                    "--punctuation requested but OPENAI_API_KEY is not set; skipping punctuation fix."
+                                                );
+                                            } else {
+                                                match runtime
+                                                    .block_on(trans::fix_punctuation_with_openai(
+                                                        &transcription,
+                                                    )) {
+                                                    Ok(fixed) => {
+                                                        transcription = fixed;
+                                                        println!("Punctuation added.");
+                                                    }
+                                                    Err(err) => {
+                                                        println!(
+                                                            "Error: Failed to fix punctuation: {:?}",
+                                                            err
+                                                        );
+                                                        play_failure_sound();
+                                                        continue;
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         if opt.cap_first {
                                             capitalize_first_letter(&mut transcription);
                                         }
