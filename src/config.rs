@@ -1,14 +1,9 @@
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::PathBuf};
 
 use crate::easy_rdev_key::PTTKey;
-use uuid::Uuid;
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
@@ -31,18 +26,6 @@ pub struct AppConfig {
     pub dark_mode: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub license_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub license_plan: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub license_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub trial_expiration: Option<String>,
-    #[serde(default)]
-    pub trial_started: bool,
-    #[serde(default = "AppConfig::default_machine_id")]
-    pub machine_id: String,
 }
 
 impl Default for AppConfig {
@@ -60,21 +43,11 @@ impl Default for AppConfig {
             start_minimized: false,
             dark_mode: false,
             api_key: None,
-            license_key: None,
-            license_plan: None,
-            license_id: None,
-            trial_expiration: None,
-            trial_started: false,
-            machine_id: AppConfig::default_machine_id(),
         }
     }
 }
 
 impl AppConfig {
-    fn default_machine_id() -> String {
-        Uuid::new_v4().to_string()
-    }
-
     fn get_config_path() -> Result<PathBuf> {
         let proj_dirs = ProjectDirs::from("com", "desk-talk", "desk-talk")
             .context("Failed to determine project directories")?;
@@ -89,11 +62,8 @@ impl AppConfig {
         let mut config = if config_path.exists() {
             let contents =
                 fs::read_to_string(&config_path).context("Failed to read config file")?;
-            let mut cfg: AppConfig =
+            let cfg: AppConfig =
                 serde_json::from_str(&contents).context("Failed to parse config file")?;
-            if cfg.machine_id.is_empty() {
-                cfg.machine_id = AppConfig::default_machine_id();
-            }
             cfg
         } else {
             AppConfig::default()
@@ -203,14 +173,6 @@ impl AppConfig {
         Err(anyhow::anyhow!("No API key found in keyring or .env file"))
     }
 
-    pub fn delete_api_key() -> Result<()> {
-        let entry = keyring::Entry::new("desk-talk", "openai-api-key")
-            .context("Failed to create keyring entry")?;
-        entry
-            .delete_credential()
-            .context("Failed to delete API key from keyring")
-    }
-
     #[cfg(windows)]
     fn enable_autostart() -> Result<()> {
         use std::env;
@@ -246,101 +208,4 @@ impl AppConfig {
             None
         }
     }
-}
-
-impl AppConfig {
-    fn parse_env_file(path: &Path) -> Result<Vec<(String, String)>> {
-        let contents = fs::read_to_string(path)?;
-        Ok(contents
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                if line.is_empty() || line.starts_with('#') {
-                    return None;
-                }
-                let mut parts = line.splitn(2, '=');
-                match (parts.next(), parts.next()) {
-                    (Some(key), Some(value)) => Some((key.to_string(), value.trim().to_string())),
-                    _ => None,
-                }
-            })
-            .collect())
-    }
-
-    fn get_license_env_path() -> Result<PathBuf> {
-        let exe_dir = std::env::current_exe()?
-            .parent()
-            .context("Failed to get exe directory")?
-            .to_path_buf();
-
-        // Priority order:
-        // 1. .env.licenses (full config with admin token - for dev/build machine)
-        // 2. .env.licenses.dist (minimal config - for customer distribution)
-
-        let exe_env = exe_dir.join(".env.licenses");
-        let exe_env_dist = exe_dir.join(".env.licenses.dist");
-
-        // Check exe directory first
-        if exe_env.exists() {
-            return Ok(exe_env);
-        }
-        if exe_env_dist.exists() {
-            return Ok(exe_env_dist);
-        }
-
-        // Fallback to workspace root for development
-        if let Ok(current_dir) = std::env::current_dir() {
-            let workspace_env = current_dir.join(".env.licenses");
-            if workspace_env.exists() {
-                return Ok(workspace_env);
-            }
-            let workspace_env_dist = current_dir.join(".env.licenses.dist");
-            if workspace_env_dist.exists() {
-                return Ok(workspace_env_dist);
-            }
-        }
-
-        // Return exe path even if it doesn't exist (for better error message)
-        Ok(exe_env)
-    }
-
-    pub fn load_keygen_config() -> Result<KeygenConfig> {
-        let env_path = Self::get_license_env_path()?;
-        if !env_path.exists() {
-            anyhow::bail!(".env.licenses not found at {:?}", env_path);
-        }
-        let kv = Self::parse_env_file(&env_path)?;
-        let mut lookup: HashMap<String, String> = kv.into_iter().collect();
-        Ok(KeygenConfig {
-            account_id: lookup
-                .remove("KEYGEN_ACCOUNT_UID")
-                .context("KEYGEN_ACCOUNT_UID missing in .env.licenses")?,
-            product_id: lookup
-                .remove("KEYGEN_PRODUCT_ID")
-                .context("KEYGEN_PRODUCT_ID missing in .env.licenses")?,
-            // Policy IDs are optional (only needed server-side for creating licenses)
-            policy_trial: lookup.remove("KEYGEN_POLICY_TRIAL"),
-            policy_pro: lookup.remove("KEYGEN_POLICY_PRO"),
-            // Admin token is optional (only needed server-side for creating licenses)
-            // NEVER distribute this to customers!
-            admin_token: lookup.remove("KEYGEN_ADMIN_TOKEN"),
-            public_key_hex: lookup
-                .remove("KEYGEN_PUBLIC_KEY")
-                .context("KEYGEN_PUBLIC_KEY missing in .env.licenses")?,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KeygenConfig {
-    pub account_id: String,
-    pub product_id: String,
-    // Policy IDs are only needed for creating licenses (server-side)
-    // Not needed for client license validation
-    pub policy_trial: Option<String>,
-    pub policy_pro: Option<String>,
-    // Admin token is only needed for creating licenses (server-side)
-    // Should NEVER be distributed to customers!
-    pub admin_token: Option<String>,
-    pub public_key_hex: String,
 }

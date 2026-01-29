@@ -17,7 +17,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["assets/*", ".env.licenses.dist"],
+    "resources": ["assets/*"],
     "externalBin": [],
     "windows": {
       "certificateThumbprint": null,

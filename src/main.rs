@@ -4,7 +4,6 @@
 mod app_state;
 mod config;
 mod easy_rdev_key;
-mod license;
 mod record;
 mod tauri_commands;
 mod transcribe;
@@ -110,8 +109,6 @@ fn auto_start_if_possible<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<AppState>();
     let config = state.config.read().clone();
 
-    // NOTE: License checks removed - Productivity Hub handles all licensing now
-
     if config.get_ptt_key().is_none() {
         println!("Auto-start skipped: no PTT key configured");
         return;
@@ -160,7 +157,6 @@ async fn start_engine<R: Runtime>(
         return Ok(());
     }
 
-    // NOTE: License checks removed - Productivity Hub handles all licensing now
     println!("Starting transcription engine...");
 
     // Debug: print config
@@ -252,17 +248,7 @@ fn main() {
         "Main: Initial config has API key: {}",
         config.api_key.is_some()
     );
-    let keygen_config = match AppConfig::load_keygen_config() {
-        Ok(cfg) => {
-            println!("✓ Keygen config loaded successfully");
-            Some(cfg)
-        }
-        Err(e) => {
-            println!("✗ Failed to load Keygen config: {}", e);
-            None
-        }
-    };
-    let app_state = AppState::new(config, keygen_config);
+    let app_state = AppState::new(config);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -291,14 +277,7 @@ fn main() {
             tauri_commands::validate_api_key,
             tauri_commands::test_openai_key,
             tauri_commands::detect_key_press,
-            tauri_commands::fetch_license_status,
-            tauri_commands::activate_license,
-            tauri_commands::deactivate_license,
-            tauri_commands::check_license_periodically,
             tauri_commands::open_url,
-            tauri_commands::start_trial,
-            tauri_commands::get_trial_status,
-            tauri_commands::format_trial_remaining,
             start_engine,
             stop_engine,
         ])

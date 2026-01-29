@@ -1,5 +1,4 @@
-use crate::config::{AppConfig, KeygenConfig};
-use crate::license::KeygenClient;
+use crate::config::AppConfig;
 use flume::Sender;
 use parking_lot::RwLock;
 use rdev::Event;
@@ -8,7 +7,6 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<RwLock<AppConfig>>,
-    pub keygen: Arc<RwLock<Option<Arc<KeygenClient>>>>,
     pub is_running: Arc<RwLock<bool>>,
     pub statistics: Arc<RwLock<Statistics>>,
     pub event_sender: Arc<RwLock<Option<Sender<Event>>>>,
@@ -23,29 +21,9 @@ pub struct Statistics {
 }
 
 impl AppState {
-    pub fn new(config: AppConfig, keygen_config: Option<KeygenConfig>) -> Self {
-        let keygen_client = keygen_config
-            .and_then(|cfg| match KeygenClient::new(cfg) {
-                Ok(client) => {
-                    println!("✓ Keygen client initialized");
-                    Some(client)
-                }
-                Err(e) => {
-                    println!("✗ Failed to create Keygen client: {}", e);
-                    None
-                }
-            })
-            .map(Arc::new);
-
-        if keygen_client.is_some() {
-            println!("✓ Licensing system ready");
-        } else {
-            println!("✗ Licensing system NOT available");
-        }
-
+    pub fn new(config: AppConfig) -> Self {
         Self {
             config: Arc::new(RwLock::new(config)),
-            keygen: Arc::new(RwLock::new(keygen_client)),
             is_running: Arc::new(RwLock::new(false)),
             statistics: Arc::new(RwLock::new(Statistics::default())),
             event_sender: Arc::new(RwLock::new(None)),
@@ -89,9 +67,5 @@ impl AppState {
 
     pub fn get_statistics(&self) -> Statistics {
         self.statistics.read().clone()
-    }
-
-    pub fn keygen_client(&self) -> Option<Arc<KeygenClient>> {
-        self.keygen.read().clone()
     }
 }

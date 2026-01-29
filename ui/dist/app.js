@@ -7,93 +7,7 @@ if (!invoke) {
 }
 
 let cachedApiKey = '';
-let licenseInfo = {
-    status: 'Unknown',
-    plan: 'Unknown',
-    key: null,
-    expiresAt: null,
-    maxMachines: null,
-    machinesUsed: null,
-    hasLicense: false,
-};
 let currentPttKey = null;
-let trialCountdownInterval = null;
-
-// Format time remaining in human-readable format
-function formatTimeRemaining(ms) {
-    if (ms <= 0) {
-        return 'Expired';
-    }
-
-    const seconds = Math.floor(ms / 1000);
-    const now = Math.floor(Date.now() / 1000);
-
-    // Compute target expiration Unix timestamp
-    const expirationUnix = now + seconds;
-
-    return invoke('format_trial_remaining', { expiration: new Date(expirationUnix * 1000).toISOString() })
-        .catch(err => {
-            console.warn('Failed to format trial remaining:', err);
-            // Fallback to manual formatting
-            const minutes = Math.floor(seconds / 60);
-            const hours = Math.floor(minutes / 60);
-            const days = Math.floor(hours / 24);
-
-            const remainingHours = hours % 24;
-            const remainingMinutes = minutes % 60;
-            const remainingSeconds = seconds % 60;
-
-            const parts = [];
-            if (days > 0) parts.push(`${days}d`);
-            if (remainingHours > 0 || days > 0) parts.push(`${remainingHours}h`);
-            if (remainingMinutes > 0 || hours > 0) parts.push(`${remainingMinutes}m`);
-            parts.push(`${remainingSeconds}s`);
-
-            return parts.join(' ');
-        });
-}
-
-// Start live countdown for trial expiration
-function startTrialCountdown(expirationDate, element, initialText) {
-    // Stop existing countdown if any
-    stopTrialCountdown();
-    
-    const updateCountdown = () => {
-        const now = new Date().getTime();
-        const expiration = new Date(expirationDate).getTime();
-        const remaining = expiration - now;
-        
-        Promise.resolve(formatTimeRemaining(remaining)).then(text => {
-            element.textContent = text;
-        });
-        
-        // If expired, stop the countdown and refresh UI
-        if (remaining <= 0) {
-            stopTrialCountdown();
-            element.textContent = 'Expired';
-            // Refresh the entire license section to update status
-            setTimeout(() => updateLicenseSection(), 1000);
-        }
-    };
-    
-    // Update immediately
-    if (initialText) {
-        element.textContent = initialText;
-    } else {
-        updateCountdown();
-    }
-    
-    // Then update every second
-    trialCountdownInterval = setInterval(updateCountdown, 1000);
-}
-
-// Stop the trial countdown
-function stopTrialCountdown() {
-    if (trialCountdownInterval) {
-        clearInterval(trialCountdownInterval);
-        trialCountdownInterval = null;
-    }
-}
 
 function applyPttKeySelection() {
     if (!currentPttKey) {
@@ -146,29 +60,6 @@ async function updateEngineStatus(isRunning, errorMessage = null) {
 async function getEngineStopReason() {
     try {
         const config = await invoke('get_config');
-        
-        // Check for license OR valid trial
-        let hasValidAccess = false;
-        
-        if (config.license_key) {
-            hasValidAccess = true;
-        } else {
-            // No license, check for active trial
-            try {
-                const trialStatus = await invoke('get_trial_status');
-                if (trialStatus.is_trial && !trialStatus.expired) {
-                    hasValidAccess = true;
-                } else if (trialStatus.is_trial && trialStatus.expired) {
-                    return 'Trial period has expired. Please purchase a license to continue using DeskTalk.';
-                }
-            } catch (e) {
-                console.warn('Failed to check trial status:', e);
-            }
-        }
-        
-        if (!hasValidAccess) {
-            return 'No active license or trial. Please activate a license or start a trial.';
-        }
         
         // Check PTT key
         if (!config.ptt_key) {
@@ -263,8 +154,6 @@ async function loadConfig() {
             cachedApiKey = config.api_key;
             apiKeyField.value = config.api_key;
             console.log('✓ API key loaded from backend (length:', config.api_key.length, ')');
-            console.log('✓ API key field value after set:', apiKeyField.value);
-            console.log('✓ API key field display:', apiKeyField.style.display);
         } else {
             console.warn('✗ No API key in loaded config');
             apiKeyField.value = ''; // Clear the field
@@ -273,8 +162,6 @@ async function loadConfig() {
         if (config.local_model) {
             document.getElementById('localModel').value = config.local_model;
         }
-
-        await refreshLicenseStatus();
 
         const running = await invoke('is_running');
         updateEngineStatus(running);
@@ -369,12 +256,6 @@ async function saveConfig() {
                 start_minimized: document.getElementById('startMinimized').checked,
                 dark_mode: document.getElementById('darkMode').checked,
                 api_key: document.getElementById('apiKey').value || cachedApiKey || null,
-                license_key: null,
-                license_plan: null,
-                license_id: null,
-                trial_expiration: null,
-                trial_started: false,
-                machine_id: "",
             };
             
             await invoke('save_config', { incoming: config });
@@ -393,7 +274,6 @@ async function saveConfig() {
         console.log('=== SAVING CONFIG ===');
         console.log('PTT Key:', pttKeyValue);
         console.log('API Key length:', apiKey ? apiKey.length : 0);
-        console.log('API Key value:', apiKey ? '(exists)' : '(empty)');
         
         if (!isLocal && !apiKey) {
             showStatus('Please enter an OpenAI API key or switch to Local mode!', 'error');
@@ -405,7 +285,7 @@ async function saveConfig() {
             return false;
         }
         
-    const config = {
+        const config = {
             ptt_key: pttKeyValue,
             special_ptt_key: null,
             device: document.getElementById('audioDevice').value,
@@ -418,13 +298,6 @@ async function saveConfig() {
             start_minimized: document.getElementById('startMinimized').checked,
             dark_mode: document.getElementById('darkMode').checked,
             api_key: apiKey || null,
-            // These fields are managed by backend, send null/default so serde doesn't fail
-            license_key: null,
-            license_plan: null,
-            license_id: null,
-            trial_expiration: null,
-            trial_started: false,
-            machine_id: "", // Backend will preserve the real value
         };
         
         console.log('Config payload being sent:', JSON.stringify({ ...config, api_key: apiKey ? '(hidden)' : null }, null, 2));
@@ -581,288 +454,6 @@ function showStatus(message, type = '') {
     }, 5000);
 }
 
-async function refreshLicenseStatus() {
-    try {
-        const status = await invoke('fetch_license_status');
-        licenseInfo.status = status.status || 'Unknown';
-        licenseInfo.plan = status.plan || 'Unknown';
-        licenseInfo.key = status.key || null;
-        licenseInfo.expiresAt = status.expires_at || null;
-        licenseInfo.maxMachines = status.max_machines || null;
-        licenseInfo.machinesUsed = status.machines_used || null;
-        licenseInfo.hasLicense = true;
-        updateLicenseSection();
-    } catch (error) {
-        console.warn('License status unavailable:', error);
-        licenseInfo.status = 'Unlicensed';
-        licenseInfo.hasLicense = false;
-        updateLicenseSection();
-    }
-}
-
-async function activateLicense() {
-    const keyInput = document.getElementById('licenseKey');
-    const licenseKey = keyInput.value.trim();
-    const statusEl = document.getElementById('licenseStatus3');
-    
-    if (!licenseKey) {
-        statusEl.textContent = 'Please enter a license key.';
-        statusEl.className = 'status error';
-        setTimeout(() => {
-            statusEl.textContent = '';
-            statusEl.className = 'status';
-        }, 5000);
-        return;
-    }
-
-    try {
-        statusEl.textContent = 'Activating license...';
-        statusEl.className = 'status';
-        
-        const status = await invoke('activate_license', { licenseKey });
-        licenseInfo.status = status.status || 'Active';
-        licenseInfo.plan = status.plan || 'Pro';
-        licenseInfo.key = status.key || licenseKey;
-        licenseInfo.expiresAt = status.expires_at || null;
-        licenseInfo.maxMachines = status.max_machines || null;
-        licenseInfo.machinesUsed = status.machines_used || null;
-        licenseInfo.hasLicense = true;
-        updateLicenseSection();
-        
-        statusEl.textContent = 'License activated successfully! Starting engine...';
-        statusEl.className = 'status success';
-        keyInput.value = ''; // Clear the input field after success
-        
-        // Try to start the engine now that we have a valid license
-        try {
-            await invoke('start_engine');
-            const isRunning = await invoke('is_running');
-            await updateEngineStatus(isRunning);
-            if (isRunning) {
-                statusEl.textContent = 'License activated and engine started!';
-            } else {
-                statusEl.textContent = 'License activated, but engine failed to start. Check settings.';
-            }
-        } catch (engineError) {
-            console.error('Failed to start engine after activation:', engineError);
-            await updateEngineStatus(false);
-            statusEl.textContent = 'License activated, but engine failed to start: ' + engineError;
-        }
-        
-        setTimeout(() => {
-            statusEl.textContent = '';
-            statusEl.className = 'status';
-        }, 5000);
-    } catch (error) {
-        console.error('Activation failed:', error);
-        // Show more specific error messages
-        let errorMsg = '';
-        if (error.toString().includes('Invalid license key')) {
-            errorMsg = 'Invalid license key';
-        } else if (error.toString().includes('not found')) {
-            errorMsg = 'License key not found';
-        } else if (error.toString().includes('suspended')) {
-            errorMsg = 'License suspended';
-        } else if (error.toString().includes('expired')) {
-            errorMsg = 'License expired';
-        } else if (error.toString().includes('max machines') || error.toString().includes('maximum')) {
-            errorMsg = 'Maximum devices reached';
-        } else if (error.toString().includes('Licensing not configured')) {
-            errorMsg = 'Licensing system not configured. Contact support.';
-        } else {
-            errorMsg = 'Activation failed: ' + error.toString();
-        }
-        
-        statusEl.textContent = errorMsg;
-        statusEl.className = 'status error';
-        licenseInfo.hasLicense = false;
-        updateLicenseSection();
-        
-        // Keep error visible longer
-        setTimeout(() => {
-            statusEl.textContent = '';
-            statusEl.className = 'status';
-        }, 8000);
-    }
-}
-
-async function updateLicenseSection() {
-    const statusEl = document.getElementById('licenseStatus');
-    
-    // Check trial status
-    let trialStatus = null;
-    try {
-        trialStatus = await invoke('get_trial_status');
-    } catch (e) {
-        console.warn('Failed to get trial status:', e);
-    }
-    
-    // Determine effective status
-    let status = 'unlicensed';
-    let displayText = 'Unlicensed';
-    
-    if (licenseInfo.hasLicense) {
-        status = (licenseInfo.status || 'unknown').toLowerCase();
-        displayText = licenseInfo.status || 'Unknown';
-    } else if (trialStatus && trialStatus.is_trial) {
-        if (trialStatus.expired) {
-            status = 'expired';
-            displayText = 'Trial Expired';
-        } else {
-            status = 'trial';
-            displayText = 'Trial Active';
-        }
-    }
-    
-    // Clear and create badge
-    statusEl.innerHTML = '';
-    const badge = document.createElement('span');
-    badge.className = `status-badge ${status}`;
-    badge.textContent = displayText;
-    statusEl.appendChild(badge);
-    
-    // Update plan
-    if (trialStatus && trialStatus.is_trial && !licenseInfo.hasLicense) {
-        document.getElementById('licensePlan').textContent = 'Trial';
-    } else {
-        document.getElementById('licensePlan').textContent = licenseInfo.plan || '—';
-    }
-    
-    // Show trial time remaining if in trial
-    const trialDaysRow = document.getElementById('trialDaysRow');
-    const trialDaysEl = document.getElementById('trialDaysRemaining');
-    if (trialStatus && trialStatus.is_trial && !licenseInfo.hasLicense && trialStatus.expiration_date) {
-        // Start live countdown
-        startTrialCountdown(trialStatus.expiration_date, trialDaysEl, trialStatus.human_remaining);
-        trialDaysRow.style.display = 'block';
-    } else {
-        // Stop countdown if it was running
-        stopTrialCountdown();
-        trialDaysRow.style.display = 'none';
-    }
-
-    const keyRow = document.getElementById('licenseKeyRow');
-    const keyDisplay = document.getElementById('licenseKeyDisplay');
-    if (licenseInfo.key && licenseInfo.hasLicense) {
-        // Show masked key by default (only first 6 characters visible)
-        if (!window.licenseKeyVisible) {
-            const maskedKey = licenseInfo.key.slice(0, 6) + '•'.repeat(Math.max(0, licenseInfo.key.length - 6));
-            keyDisplay.textContent = maskedKey;
-        } else {
-            keyDisplay.textContent = licenseInfo.key;
-        }
-        keyRow.style.display = 'block';
-    } else {
-        keyRow.style.display = 'none';
-    }
-
-    const expiresEl = document.getElementById('licenseExpires');
-    if (licenseInfo.expiresAt) {
-        const date = new Date(licenseInfo.expiresAt);
-        expiresEl.textContent = date.toLocaleString();
-    } else if (trialStatus && trialStatus.is_trial && trialStatus.expiration_date) {
-        const date = new Date(trialStatus.expiration_date);
-        expiresEl.textContent = date.toLocaleString();
-    } else if (licenseInfo.hasLicense) {
-        // Has license but no expiration date = never expires
-        expiresEl.textContent = 'Never';
-    } else {
-        expiresEl.textContent = '—';
-    }
-
-    const devicesEl = document.getElementById('licenseDevices');
-    if (licenseInfo.maxMachines != null && licenseInfo.machinesUsed != null) {
-        devicesEl.textContent = `${licenseInfo.machinesUsed} / ${licenseInfo.maxMachines}`;
-    } else {
-        devicesEl.textContent = '—';
-    }
-
-    const message = document.getElementById('licenseMessage');
-    const trialSection = document.getElementById('trialSection');
-    const activateSection = document.getElementById('activateSection');
-    const buySection = document.getElementById('buySection');
-    const deactivateSection = document.getElementById('deactivateSection');
-    
-    // Show/hide sections based on license/trial status
-    if (licenseInfo.hasLicense) {
-        // Has active license
-        message.textContent = 'License active. Thank you for supporting DeskTalk!';
-        message.classList.remove('error');
-        message.classList.add('success');
-        trialSection.style.display = 'none';
-        activateSection.style.display = 'none';
-        buySection.style.display = 'none';
-        deactivateSection.style.display = 'block';
-    } else if (trialStatus && trialStatus.is_trial) {
-        // In trial (active or expired)
-        if (trialStatus.expired) {
-            message.textContent = 'Your trial has expired. Purchase a license to continue using DeskTalk.';
-            message.classList.remove('success');
-            message.classList.add('error');
-        } else {
-            const remainingText = trialStatus.human_remaining || 'Time remaining unknown';
-            message.textContent = `Trial active! ${remainingText} remaining. Purchase a license for unlimited access.`;
-            message.classList.remove('error');
-            message.classList.add('success');
-        }
-        trialSection.style.display = 'none';
-        activateSection.style.display = 'block';
-        buySection.style.display = 'block';
-        deactivateSection.style.display = 'none';
-    } else {
-        // No license, no trial
-        message.textContent = 'Start a free 7-day trial or enter your license key.';
-        message.classList.remove('success');
-        message.classList.add('error');
-        trialSection.style.display = 'block';
-        activateSection.style.display = 'block';
-        buySection.style.display = 'block';
-        deactivateSection.style.display = 'none';
-    }
-}
-
-async function startTrial() {
-    const statusEl = document.getElementById('trialStatus');
-    const startBtn = document.getElementById('startTrialBtn');
-    
-    try {
-        statusEl.textContent = 'Starting trial...';
-        statusEl.className = 'status';
-        startBtn.disabled = true;
-        
-        const result = await invoke('start_trial');
-        
-        statusEl.textContent = 'Trial started! You have 7 days of full access.';
-        statusEl.className = 'status success';
-        
-        // Refresh license section to show trial status
-        await updateLicenseSection();
-        
-        // Try to start the engine now that trial is active
-        try {
-            await invoke('start_engine');
-            await updateEngineStatus(true);
-        } catch (e) {
-            console.warn('Failed to auto-start engine after trial:', e);
-        }
-        
-        setTimeout(() => {
-            statusEl.textContent = '';
-            statusEl.className = 'status';
-        }, 5000);
-    } catch (error) {
-        console.error('Failed to start trial:', error);
-        statusEl.textContent = 'Failed to start trial: ' + error;
-        statusEl.className = 'status error';
-        startBtn.disabled = false;
-        
-        setTimeout(() => {
-            statusEl.textContent = '';
-            statusEl.className = 'status';
-        }, 5000);
-    }
-}
-
 // Dark mode toggle
 document.getElementById('darkMode').addEventListener('change', (e) => {
     if (e.target.checked) {
@@ -877,24 +468,12 @@ document.getElementById('saveBtn').addEventListener('click', saveConfig);
 document.getElementById('saveBtn2').addEventListener('click', saveConfig);
 document.getElementById('validateKeyBtn').addEventListener('click', validateApiKey);
 document.getElementById('refreshDevicesBtn').addEventListener('click', loadAudioDevices);
-document.getElementById('activateLicenseBtn').addEventListener('click', activateLicense);
 
 // Only add listener if button exists (it's commented out in HTML)
 const detectKeyBtn = document.getElementById('detectKeyBtn');
 if (detectKeyBtn) {
     detectKeyBtn.addEventListener('click', detectKeyPress);
 }
-
-document.getElementById('startTrialBtn').addEventListener('click', startTrial);
-
-document.getElementById('buyLicenseBtn').addEventListener('click', async () => {
-    try {
-        await invoke('open_url', { url: 'https://buy.stripe.com/5kQcMY0s96f051Lg7U0sU01' });
-    } catch (error) {
-        console.error('Failed to open purchase page:', error);
-        showStatus('Failed to open purchase page', 'error');
-    }
-});
 
 document.getElementById('viewUsageBtn').addEventListener('click', async () => {
     try {
@@ -925,61 +504,6 @@ document.getElementById('apiKeyVideoLink').addEventListener('click', async (e) =
     }
 });
 
-document.getElementById('deactivateLicenseBtn').addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to deactivate this license from this device?')) {
-        return;
-    }
-    try {
-        // Stop the engine first (license is required)
-        const wasRunning = await invoke('is_running');
-        if (wasRunning) {
-            await invoke('stop_engine');
-        }
-        
-        await invoke('deactivate_license');
-        licenseInfo.hasLicense = false;
-        licenseInfo.status = 'Unlicensed';
-        licenseInfo.plan = 'Unknown';
-        licenseInfo.key = null;
-        licenseInfo.expiresAt = null;
-        licenseInfo.maxMachines = null;
-        licenseInfo.machinesUsed = null;
-        updateLicenseSection();
-        
-        // Check if trial is active, and if so, restart the engine
-        let trialStatus = null;
-        try {
-            trialStatus = await invoke('get_trial_status');
-        } catch (e) {
-            console.warn('Failed to check trial status:', e);
-        }
-        
-        if (trialStatus && trialStatus.is_trial && !trialStatus.expired) {
-            // Trial is active, try to restart engine
-            console.log('Trial is active after deactivation, attempting to restart engine...');
-            try {
-                await invoke('start_engine');
-                await updateEngineStatus(true);
-                showStatus('License deactivated. Trial is active - engine restarted.', 'success');
-            } catch (e) {
-                console.error('Failed to restart engine with trial:', e);
-                await updateEngineStatus(false);
-                showStatus('License deactivated. Engine stopped: ' + e, 'error');
-            }
-        } else {
-            // No active trial
-            await updateEngineStatus(false);
-            showStatus('License deactivated successfully! Engine stopped.', 'success');
-        }
-    } catch (error) {
-        console.error('Failed to deactivate license:', error);
-        showStatus('Failed to deactivate license: ' + error, 'error');
-    }
-});
-
-// Initialize license key visibility state
-window.licenseKeyVisible = false;
-
 // Initialize
 console.log('App.js loaded, initializing...');
 document.addEventListener('DOMContentLoaded', () => {
@@ -990,40 +514,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { passive: true });
     }
 
-    // License key toggle button
-    const toggleKeyBtn = document.getElementById('toggleKeyBtn');
-    if (toggleKeyBtn) {
-        toggleKeyBtn.addEventListener('click', () => {
-            window.licenseKeyVisible = !window.licenseKeyVisible;
-            toggleKeyBtn.textContent = window.licenseKeyVisible ? '🙈' : '👁️';
-            toggleKeyBtn.title = window.licenseKeyVisible ? 'Hide Key' : 'Show Key';
-            updateLicenseSection();
-        });
-    }
-
-    // License key copy button
-    const copyKeyBtn = document.getElementById('copyKeyBtn');
-    if (copyKeyBtn) {
-        copyKeyBtn.addEventListener('click', async () => {
-            if (licenseInfo.key) {
-                try {
-                    await navigator.clipboard.writeText(licenseInfo.key);
-                    const originalText = copyKeyBtn.textContent;
-                    copyKeyBtn.textContent = '✅';
-                    setTimeout(() => {
-                        copyKeyBtn.textContent = originalText;
-                    }, 2000);
-                } catch (err) {
-                    console.error('Failed to copy license key:', err);
-                    copyKeyBtn.textContent = '❌';
-                    setTimeout(() => {
-                        copyKeyBtn.textContent = '📋';
-                    }, 2000);
-                }
-            }
-        });
-    }
-
     (async () => {
         await loadPTTKeys();
         await loadConfig();
@@ -1031,21 +521,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Initialization complete');
     })();
 
-setInterval(() => {
-    const statsTab = document.getElementById('stats');
-    if (statsTab && statsTab.classList.contains('active')) {
-        loadStatistics();
-    }
-}, 1500);
-
-// Load license status once when switching to License tab (not repeatedly)
-document.querySelectorAll('.tab-button').forEach(button => {
-    button.addEventListener('click', () => {
-        if (button.dataset.tab === 'license') {
-            refreshLicenseStatus();
+    setInterval(() => {
+        const statsTab = document.getElementById('stats');
+        if (statsTab && statsTab.classList.contains('active')) {
+            loadStatistics();
         }
-    });
-});
+    }, 1500);
 });
 
 // NOTE: PTT doesn't work when DeskTalk window is focused - this is a Windows limitation
