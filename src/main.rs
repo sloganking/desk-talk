@@ -110,18 +110,7 @@ fn auto_start_if_possible<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<AppState>();
     let config = state.config.read().clone();
 
-    // Check for license OR valid trial
-    let has_license = config.license_key.is_some();
-    let trial_status = tauri_commands::get_trial_status(state.clone()).ok();
-    let has_valid_trial = trial_status
-        .as_ref()
-        .map(|t| t.is_trial && !t.expired)
-        .unwrap_or(false);
-
-    if !has_license && !has_valid_trial {
-        println!("Auto-start skipped: no active license or trial");
-        return;
-    }
+    // NOTE: License checks removed - Productivity Hub handles all licensing now
 
     if config.get_ptt_key().is_none() {
         println!("Auto-start skipped: no PTT key configured");
@@ -171,74 +160,7 @@ async fn start_engine<R: Runtime>(
         return Ok(());
     }
 
-    // Check for valid license OR active trial before starting
-    let (has_license, license_key, fingerprint, trial_status) = {
-        let config = state.config.read();
-        let trial_status = tauri_commands::get_trial_status(state.clone()).unwrap_or(
-            tauri_commands::TrialStatus {
-                is_trial: false,
-                days_remaining: 0,
-                expired: false,
-                expiration_date: None,
-                human_remaining: None,
-            },
-        );
-        println!("Engine start check - has_license: {}, trial.is_trial: {}, trial.expired: {}, trial.days_remaining: {}",
-                 config.license_key.is_some(), trial_status.is_trial, trial_status.expired, trial_status.days_remaining);
-        (
-            config.license_key.is_some(),
-            config.license_key.clone(),
-            config.machine_id.clone(),
-            trial_status,
-        )
-    };
-
-    // Check if trial is expired
-    if trial_status.is_trial && trial_status.expired {
-        println!("Rejecting engine start: trial expired");
-        return Err(
-            "Trial period has expired. Please purchase a license to continue using DeskTalk."
-                .to_string(),
-        );
-    }
-
-    // If no license and no trial, reject
-    if !has_license && !trial_status.is_trial {
-        println!("Rejecting engine start: no license and no trial");
-        return Err("No active license or trial. Please activate a license or start a trial to use DeskTalk.".to_string());
-    }
-
-    println!("Engine start check passed - has valid license or trial");
-
-    // Validate the license is still active
-    if let Some(client) = state.keygen_client() {
-        if let Some(key) = license_key {
-            match client.validate_license(&key, &fingerprint).await {
-                Ok(validation) => {
-                    let status = validation
-                        .license
-                        .status
-                        .as_deref()
-                        .unwrap_or("UNKNOWN")
-                        .to_uppercase();
-                    if status != "ACTIVE" {
-                        return Err(format!(
-                            "License is {}. Please contact support.",
-                            status.to_lowercase()
-                        ));
-                    }
-                    println!("License validated: {}", status);
-                }
-                Err(e) => {
-                    return Err(format!(
-                        "License validation failed: {}. Please reactivate your license.",
-                        e
-                    ));
-                }
-            }
-        }
-    }
-
+    // NOTE: License checks removed - Productivity Hub handles all licensing now
     println!("Starting transcription engine...");
 
     // Debug: print config
