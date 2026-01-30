@@ -239,6 +239,8 @@ async function loadStatistics() {
     try {
         const stats = await invoke('get_statistics');
         
+        const typingWPM = stats.typing_wpm || 40;
+        
         // Session stats
         document.getElementById('totalWords').textContent = formatNumber(stats.total_words || 0);
         document.getElementById('avgWPM').textContent = (stats.average_wpm || 0).toFixed(1);
@@ -246,15 +248,25 @@ async function loadStatistics() {
         document.getElementById('sessionCount').textContent = formatNumber(stats.session_count || 0);
         document.getElementById('timeSaved').textContent = formatDuration(stats.time_saved_secs || 0);
         
-        // Speed multiplier: speaking WPM / typing WPM
-        const typingWPM = stats.typing_wpm || 40;
-        const speakingWPM = stats.lifetime_average_wpm || stats.average_wpm || 0;
+        // Session speed multiplier (only show if session has data)
+        const sessionWPM = stats.average_wpm || 0;
         const speedMultiplierEl = document.getElementById('speedMultiplier');
-        if (speakingWPM > 0 && typingWPM > 0) {
-            const multiplier = speakingWPM / typingWPM;
-            speedMultiplierEl.textContent = `${multiplier.toFixed(1)}x faster`;
+        if (sessionWPM > 0 && typingWPM > 0) {
+            const multiplier = sessionWPM / typingWPM;
+            speedMultiplierEl.textContent = `${multiplier.toFixed(1)}x`;
+            speedMultiplierEl.title = `You speak ${multiplier.toFixed(1)}x faster than you type`;
         } else {
             speedMultiplierEl.textContent = '';
+        }
+        
+        // Session efficiency percentage
+        const timeSavedPercentEl = document.getElementById('timeSavedPercent');
+        if (stats.total_words > 0 && typingWPM > 0) {
+            const timeToType = (stats.total_words * 60) / typingWPM;
+            const efficiency = (stats.time_saved_secs / timeToType) * 100;
+            timeSavedPercentEl.textContent = `${efficiency.toFixed(0)}% saved`;
+        } else {
+            timeSavedPercentEl.textContent = '';
         }
         
         // Lifetime stats
@@ -263,6 +275,27 @@ async function loadStatistics() {
         document.getElementById('lifetimeTime').textContent = `Lifetime: ${formatDuration(stats.lifetime_total_recording_time_secs || 0)}`;
         document.getElementById('lifetimeSessions').textContent = `Lifetime: ${formatNumber(stats.lifetime_session_count || 0)}`;
         document.getElementById('lifetimeTimeSaved').textContent = `Lifetime: ${formatDuration(stats.lifetime_time_saved_secs || 0)}`;
+        
+        // Lifetime speed multiplier
+        const lifetimeWPM = stats.lifetime_average_wpm || 0;
+        const lifetimeSpeedMultiplierEl = document.getElementById('lifetimeSpeedMultiplier');
+        if (lifetimeWPM > 0 && typingWPM > 0) {
+            const multiplier = lifetimeWPM / typingWPM;
+            lifetimeSpeedMultiplierEl.textContent = `${multiplier.toFixed(1)}x`;
+            lifetimeSpeedMultiplierEl.title = `You speak ${multiplier.toFixed(1)}x faster than you type`;
+        } else {
+            lifetimeSpeedMultiplierEl.textContent = '';
+        }
+        
+        // Lifetime efficiency percentage
+        const lifetimeTimeSavedPercentEl = document.getElementById('lifetimeTimeSavedPercent');
+        if (stats.lifetime_total_words > 0 && typingWPM > 0) {
+            const timeToType = (stats.lifetime_total_words * 60) / typingWPM;
+            const efficiency = (stats.lifetime_time_saved_secs / timeToType) * 100;
+            lifetimeTimeSavedPercentEl.textContent = `${efficiency.toFixed(0)}% saved`;
+        } else {
+            lifetimeTimeSavedPercentEl.textContent = '';
+        }
         
         // Update typing WPM input if it hasn't been touched
         const typingInput = document.getElementById('typingWPM');

@@ -487,10 +487,28 @@ body.dark-mode .stat-lifetime {
     font-weight: 600;
     margin-left: 6px;
     vertical-align: middle;
+    cursor: help;
 }
 
 body.dark-mode .speed-multiplier {
     background: rgba(102, 126, 234, 0.3);
+}
+
+/* Efficiency badge for time saved */
+.efficiency-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.3);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+    cursor: help;
+}
+
+body.dark-mode .efficiency-badge {
+    background: rgba(255, 255, 255, 0.15);
 }
 
 body.dark-mode .license-status {
