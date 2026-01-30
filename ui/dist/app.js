@@ -243,12 +243,14 @@ async function loadStatistics() {
         document.getElementById('totalWords').textContent = formatNumber(stats.total_words || 0);
         document.getElementById('avgWPM').textContent = (stats.average_wpm || 0).toFixed(1);
         document.getElementById('totalTime').textContent = formatDuration(stats.total_recording_time_secs || 0);
+        document.getElementById('sessionCount').textContent = formatNumber(stats.session_count || 0);
         document.getElementById('timeSaved').textContent = formatDuration(stats.time_saved_secs || 0);
         
         // Lifetime stats
         document.getElementById('lifetimeWords').textContent = `Lifetime: ${formatNumber(stats.lifetime_total_words || 0)}`;
         document.getElementById('lifetimeWPM').textContent = `Lifetime: ${(stats.lifetime_average_wpm || 0).toFixed(1)}`;
         document.getElementById('lifetimeTime').textContent = `Lifetime: ${formatDuration(stats.lifetime_total_recording_time_secs || 0)}`;
+        document.getElementById('lifetimeSessions').textContent = `Lifetime: ${formatNumber(stats.lifetime_session_count || 0)}`;
         document.getElementById('lifetimeTimeSaved').textContent = `Lifetime: ${formatDuration(stats.lifetime_time_saved_secs || 0)}`;
         
         // Update typing WPM input if it hasn't been touched

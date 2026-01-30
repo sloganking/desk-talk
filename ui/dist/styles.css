@@ -310,6 +310,11 @@ footer {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 }
 
+/* Wide card spans full width on second row */
+.stat-card-wide {
+    grid-column: 1 / -1;
+}
+
 body.dark-mode .stat-card-highlight {
     background: linear-gradient(135deg, #065f46 0%, #047857 100%);
 }
