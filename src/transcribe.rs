@@ -187,7 +187,7 @@ pub mod trans {
     }
 
     /// Uses GPT-4o-mini to add punctuation to text that is missing it.
-    pub async fn fix_punctuation_with_openai(
+    async fn fix_punctuation_inner(
         client: &Client<OpenAIConfig>,
         text: &str,
     ) -> Result<String, Box<dyn Error>> {
@@ -226,5 +226,20 @@ pub mod trans {
             .first()
             .and_then(|choice| choice.message.content.clone())
             .ok_or_else(|| Box::<dyn Error>::from(anyhow!("No response from OpenAI")))
+    }
+
+    /// Uses GPT-4o-mini to add punctuation to text that is missing it.
+    /// Has a 10-second timeout to prevent hanging.
+    pub async fn fix_punctuation_with_openai(
+        client: &Client<OpenAIConfig>,
+        text: &str,
+    ) -> Result<String, Box<dyn Error>> {
+        match future::timeout(Duration::from_secs(10), fix_punctuation_inner(client, text)).await {
+            Ok(result) => result,
+            Err(_) => {
+                eprintln!("Punctuation fix timed out after 10 seconds");
+                Err(anyhow!("Punctuation fix timed out").into())
+            }
+        }
     }
 }
