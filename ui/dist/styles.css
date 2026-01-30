@@ -305,6 +305,71 @@ footer {
     font-weight: 500;
 }
 
+/* Highlighted stat card for time saved */
+.stat-card-highlight {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+body.dark-mode .stat-card-highlight {
+    background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+}
+
+/* Typing speed input section */
+.typing-speed-section {
+    margin-bottom: 24px;
+}
+
+.typing-speed-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.wpm-input {
+    width: 80px;
+    padding: 8px 12px;
+    font-size: 16px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.wpm-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.wpm-label {
+    font-weight: 500;
+    color: #555;
+}
+
+.typing-test-link {
+    color: #667eea;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.typing-test-link:hover {
+    text-decoration: underline;
+}
+
+body.dark-mode .wpm-input {
+    background: #2a2d3a;
+    border-color: #3a3d4a;
+    color: #e0e0e0;
+}
+
+body.dark-mode .wpm-label {
+    color: #a0a0a0;
+}
+
+body.dark-mode .typing-test-link {
+    color: #8b9cf6;
+}
+
 .license-status {
     background: #f5f7fa;
     padding: 20px;

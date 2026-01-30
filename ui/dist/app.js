@@ -142,6 +142,11 @@ async function loadConfig() {
             document.body.classList.remove('dark-mode');
         }
         
+        // Typing speed
+        if (config.typing_wpm) {
+            document.getElementById('typingWPM').value = config.typing_wpm;
+        }
+        
         // Transcription settings
         const isLocal = config.use_local || false;
         document.getElementById('modeOpenAI').checked = !isLocal;
@@ -237,14 +242,20 @@ async function loadStatistics() {
         // Session stats
         document.getElementById('totalWords').textContent = formatNumber(stats.total_words || 0);
         document.getElementById('avgWPM').textContent = (stats.average_wpm || 0).toFixed(1);
-        document.getElementById('sessionCount').textContent = formatNumber(stats.session_count || 0);
         document.getElementById('totalTime').textContent = formatDuration(stats.total_recording_time_secs || 0);
+        document.getElementById('timeSaved').textContent = formatDuration(stats.time_saved_secs || 0);
         
         // Lifetime stats
         document.getElementById('lifetimeWords').textContent = `Lifetime: ${formatNumber(stats.lifetime_total_words || 0)}`;
         document.getElementById('lifetimeWPM').textContent = `Lifetime: ${(stats.lifetime_average_wpm || 0).toFixed(1)}`;
-        document.getElementById('lifetimeSessions').textContent = `Lifetime: ${formatNumber(stats.lifetime_session_count || 0)}`;
         document.getElementById('lifetimeTime').textContent = `Lifetime: ${formatDuration(stats.lifetime_total_recording_time_secs || 0)}`;
+        document.getElementById('lifetimeTimeSaved').textContent = `Lifetime: ${formatDuration(stats.lifetime_time_saved_secs || 0)}`;
+        
+        // Update typing WPM input if it hasn't been touched
+        const typingInput = document.getElementById('typingWPM');
+        if (typingInput && !typingInput.dataset.userEdited) {
+            typingInput.value = stats.typing_wpm || 40;
+        }
     } catch (error) {
         console.error('Error loading statistics:', error);
     }
@@ -278,6 +289,7 @@ async function saveConfig() {
                 start_minimized: document.getElementById('startMinimized').checked,
                 dark_mode: document.getElementById('darkMode').checked,
                 api_key: document.getElementById('apiKey').value || cachedApiKey || null,
+                typing_wpm: parseInt(document.getElementById('typingWPM').value) || 40,
             };
             
             await invoke('save_config', { incoming: config });
@@ -321,6 +333,7 @@ async function saveConfig() {
             start_minimized: document.getElementById('startMinimized').checked,
             dark_mode: document.getElementById('darkMode').checked,
             api_key: apiKey || null,
+            typing_wpm: parseInt(document.getElementById('typingWPM').value) || 40,
         };
         
         console.log('Config payload being sent:', JSON.stringify({ ...config, api_key: apiKey ? '(hidden)' : null }, null, 2));
@@ -525,6 +538,40 @@ document.getElementById('apiKeyVideoLink').addEventListener('click', async (e) =
         console.error('Failed to open URL:', error);
         showStatus('Failed to open browser: ' + error, 'error');
     }
+});
+
+// Typing test link
+document.getElementById('typingTestLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+        await invoke('open_url', { url: 'https://www.octotyping.com/typing-speed-test' });
+    } catch (error) {
+        console.error('Failed to open URL:', error);
+        showStatus('Failed to open browser: ' + error, 'error');
+    }
+});
+
+// Auto-save typing WPM when changed
+let typingWPMSaveTimeout = null;
+document.getElementById('typingWPM').addEventListener('input', (e) => {
+    e.target.dataset.userEdited = 'true';
+    
+    // Debounce the save
+    if (typingWPMSaveTimeout) {
+        clearTimeout(typingWPMSaveTimeout);
+    }
+    typingWPMSaveTimeout = setTimeout(async () => {
+        try {
+            const config = await invoke('get_config');
+            config.typing_wpm = parseInt(e.target.value) || 40;
+            await invoke('save_config', { incoming: config });
+            console.log('Typing WPM saved:', config.typing_wpm);
+            // Refresh stats to show updated time saved
+            loadStatistics();
+        } catch (error) {
+            console.error('Failed to save typing WPM:', error);
+        }
+    }, 500);
 });
 
 // Initialize

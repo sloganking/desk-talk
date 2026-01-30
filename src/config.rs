@@ -28,6 +28,13 @@ pub struct AppConfig {
     pub dark_mode: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    /// User's typing speed in words per minute (for calculating time saved)
+    #[serde(default = "default_typing_wpm")]
+    pub typing_wpm: u32,
+}
+
+fn default_typing_wpm() -> u32 {
+    40 // Average typing speed
 }
 
 impl Default for AppConfig {
@@ -46,6 +53,7 @@ impl Default for AppConfig {
             start_minimized: false,
             dark_mode: false,
             api_key: None,
+            typing_wpm: default_typing_wpm(),
         }
     }
 }

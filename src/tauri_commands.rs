@@ -11,11 +11,15 @@ pub struct CombinedStatistics {
     pub total_recording_time_secs: f64,
     pub average_wpm: f64,
     pub session_count: usize,
+    pub time_saved_secs: f64,
     // Lifetime stats
     pub lifetime_total_words: usize,
     pub lifetime_total_recording_time_secs: f64,
     pub lifetime_average_wpm: f64,
     pub lifetime_session_count: usize,
+    pub lifetime_time_saved_secs: f64,
+    // User's typing speed for reference
+    pub typing_wpm: u32,
 }
 
 #[tauri::command]
@@ -74,6 +78,30 @@ pub fn save_config(state: tauri::State<AppState>, incoming: AppConfig) -> Result
 pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistics, String> {
     let session = state.get_statistics();
     let lifetime = state.get_lifetime_statistics();
+    let config = state.config.read();
+    let typing_wpm = config.typing_wpm;
+    drop(config);
+
+    // Calculate time saved: time_to_type - actual_recording_time
+    // time_to_type = words / (typing_wpm / 60) = words * 60 / typing_wpm
+    let calc_time_saved = |words: usize, recording_secs: f64, wpm: u32| -> f64 {
+        if wpm == 0 {
+            return 0.0;
+        }
+        let time_to_type_secs = (words as f64) * 60.0 / (wpm as f64);
+        (time_to_type_secs - recording_secs).max(0.0)
+    };
+
+    let time_saved = calc_time_saved(
+        session.total_words,
+        session.total_recording_time_secs,
+        typing_wpm,
+    );
+    let lifetime_time_saved = calc_time_saved(
+        lifetime.total_words,
+        lifetime.total_recording_time_secs,
+        typing_wpm,
+    );
 
     Ok(CombinedStatistics {
         // Session stats
@@ -81,11 +109,15 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         total_recording_time_secs: session.total_recording_time_secs,
         average_wpm: session.average_wpm,
         session_count: session.session_count,
+        time_saved_secs: time_saved,
         // Lifetime stats
         lifetime_total_words: lifetime.total_words,
         lifetime_total_recording_time_secs: lifetime.total_recording_time_secs,
         lifetime_average_wpm: lifetime.average_wpm(),
         lifetime_session_count: lifetime.session_count,
+        lifetime_time_saved_secs: lifetime_time_saved,
+        // Config
+        typing_wpm,
     })
 }
 

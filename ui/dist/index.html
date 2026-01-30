@@ -126,6 +126,16 @@
 
         <!-- Statistics Tab -->
         <div class="tab-content" id="stats">
+            <div class="section typing-speed-section">
+                <h2>Your Typing Speed</h2>
+                <div class="typing-speed-input-row">
+                    <input type="number" id="typingWPM" min="1" max="200" value="40" class="wpm-input">
+                    <span class="wpm-label">WPM</span>
+                    <a href="#" id="typingTestLink" class="typing-test-link">Don't know? Take a test →</a>
+                </div>
+                <p class="hint">Average typist: 40 WPM • Professional: 65-75 WPM</p>
+            </div>
+            
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-value" id="totalWords">0</div>
@@ -134,7 +144,7 @@
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="avgWPM">0</div>
-                    <div class="stat-label">Average WPM</div>
+                    <div class="stat-label">Speaking WPM</div>
                     <div class="stat-lifetime" id="lifetimeWPM">Lifetime: 0</div>
                 </div>
                 <div class="stat-card">
@@ -142,10 +152,10 @@
                     <div class="stat-label">Recording Time</div>
                     <div class="stat-lifetime" id="lifetimeTime">Lifetime: 0m</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="sessionCount">0</div>
-                    <div class="stat-label">Sessions</div>
-                    <div class="stat-lifetime" id="lifetimeSessions">Lifetime: 0</div>
+                <div class="stat-card stat-card-highlight">
+                    <div class="stat-value" id="timeSaved">0m</div>
+                    <div class="stat-label">⏱️ Time Saved</div>
+                    <div class="stat-lifetime" id="lifetimeTimeSaved">Lifetime: 0m</div>
                 </div>
             </div>
         </div>
