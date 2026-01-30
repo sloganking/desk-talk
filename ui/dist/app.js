@@ -246,6 +246,17 @@ async function loadStatistics() {
         document.getElementById('sessionCount').textContent = formatNumber(stats.session_count || 0);
         document.getElementById('timeSaved').textContent = formatDuration(stats.time_saved_secs || 0);
         
+        // Speed multiplier: speaking WPM / typing WPM
+        const typingWPM = stats.typing_wpm || 40;
+        const speakingWPM = stats.lifetime_average_wpm || stats.average_wpm || 0;
+        const speedMultiplierEl = document.getElementById('speedMultiplier');
+        if (speakingWPM > 0 && typingWPM > 0) {
+            const multiplier = speakingWPM / typingWPM;
+            speedMultiplierEl.textContent = `${multiplier.toFixed(1)}x faster`;
+        } else {
+            speedMultiplierEl.textContent = '';
+        }
+        
         // Lifetime stats
         document.getElementById('lifetimeWords').textContent = `Lifetime: ${formatNumber(stats.lifetime_total_words || 0)}`;
         document.getElementById('lifetimeWPM').textContent = `Lifetime: ${(stats.lifetime_average_wpm || 0).toFixed(1)}`;

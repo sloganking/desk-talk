@@ -477,6 +477,22 @@ body.dark-mode .stat-lifetime {
     border-top-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Speed multiplier badge */
+.speed-multiplier {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.25);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+body.dark-mode .speed-multiplier {
+    background: rgba(102, 126, 234, 0.3);
+}
+
 body.dark-mode .license-status {
     background: #1a1d2e;
     border-color: #2a2d3e;
