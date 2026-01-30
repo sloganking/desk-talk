@@ -19,6 +19,8 @@ pub struct AppConfig {
     pub space: bool,
     pub type_chars: bool,
     #[serde(default)]
+    pub punctuation: bool,
+    #[serde(default)]
     pub auto_start: bool,
     #[serde(default)]
     pub start_minimized: bool,
@@ -39,6 +41,7 @@ impl Default for AppConfig {
             cap_first: false,
             space: false,
             type_chars: false,
+            punctuation: false,
             auto_start: false,
             start_minimized: false,
             dark_mode: false,

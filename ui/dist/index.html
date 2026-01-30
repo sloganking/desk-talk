@@ -50,6 +50,11 @@
                     <span>Add space after transcription</span>
                 </label>
                 <label class="checkbox">
+                    <input type="checkbox" id="punctuation">
+                    <span>Auto-fix missing punctuation</span>
+                    <span class="info-icon" title="If transcription has no periods, question marks, or exclamation points, uses AI to add punctuation. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                </label>
+                <label class="checkbox">
                     <input type="checkbox" id="typeChars">
                     <span>Type characters instead of pasting</span>
                     <span class="info-icon" title="Slower but works with applications that don't understand Ctrl+V" onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>

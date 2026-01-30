@@ -64,6 +64,11 @@ struct Opt {
     #[arg(short, long)]
     type_chars: bool,
 
+    /// If the transcription is missing punctuation (no periods, question marks, or exclamation points),
+    /// use an LLM to add punctuation. Requires OPENAI_API_KEY to be set.
+    #[arg(long)]
+    punctuation: bool,
+
     /// The push to talk key.
     /// Use this if you want to use a key that is not supported by the PTTKey enum.
     #[arg(short, long, conflicts_with("ptt_key"))]
@@ -112,6 +117,11 @@ impl From<LocalModel> for ModelType {
             LocalModel::LargeV3 => ModelType::LargeV3,
         }
     }
+}
+
+/// Returns true if the text is missing sentence-ending punctuation (. ! ?)
+fn needs_punctuation_fix(text: &str) -> bool {
+    !text.chars().any(|c| matches!(c, '.' | '!' | '?'))
 }
 
 fn capitalize_first_letter(s: &mut String) {
@@ -356,8 +366,38 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
 
-                                    // Transctiption post processing
+                                    // Transcription post processing
                                     {
+                                        // Remove ellipses first (Whisper sometimes adds these)
+                                        transcription = transcription.replace("...", "");
+
+                                        // Fix punctuation if enabled and text is missing it
+                                        if opt.punctuation && needs_punctuation_fix(&transcription)
+                                        {
+                                            println!(
+                                                "Transcription missing punctuation, fixing..."
+                                            );
+                                            match runtime.block_on(
+                                                trans::fix_punctuation_with_openai(
+                                                    &client,
+                                                    &transcription,
+                                                ),
+                                            ) {
+                                                Ok(fixed) => {
+                                                    println!("Punctuation added.");
+                                                    transcription = fixed;
+                                                }
+                                                Err(err) => {
+                                                    // Punctuation fix failed - play error sound but continue with original text
+                                                    println!(
+                                                        "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
+                                                        err
+                                                    );
+                                                    play_failure_sound();
+                                                }
+                                            }
+                                        }
+
                                         if opt.cap_first {
                                             capitalize_first_letter(&mut transcription);
                                         }
@@ -370,7 +410,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         }
 
-                                        // Remove ellipses.
+                                        // Remove ellipses again (LLM might add them)
                                         transcription = transcription.replace("...", "");
                                     }
 

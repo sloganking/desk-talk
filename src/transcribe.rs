@@ -1,7 +1,14 @@
 pub mod trans {
 
     use anyhow::{anyhow, bail, Context};
-    use async_openai::{config::OpenAIConfig, types::CreateTranscriptionRequestArgs, Client};
+    use async_openai::{
+        config::OpenAIConfig,
+        types::{
+            ChatCompletionRequestMessage, CreateChatCompletionRequestArgs,
+            CreateTranscriptionRequestArgs, Role,
+        },
+        Client,
+    };
     use async_std::future;
     use directories::ProjectDirs;
     use mutter::{Model, ModelType};
@@ -177,5 +184,47 @@ pub mod trans {
         res = res.replace("\n", " "); // Remove double spaces
         res = res.trim().to_string();
         Ok(res)
+    }
+
+    /// Uses GPT-4o-mini to add punctuation to text that is missing it.
+    pub async fn fix_punctuation_with_openai(
+        client: &Client<OpenAIConfig>,
+        text: &str,
+    ) -> Result<String, Box<dyn Error>> {
+        let system_message = ChatCompletionRequestMessage {
+            role: Role::System,
+            content: Some(
+                "You are a punctuation restoration assistant. Add punctuation (periods, commas, question marks, exclamation points) and fix capitalization where needed to make the text readable. Return ONLY the corrected text without any additional comments, explanations, or conversational responses. Preserve the original wording and do not add or remove content."
+                    .to_string(),
+            ),
+            name: None,
+            function_call: None,
+        };
+
+        let user_message = ChatCompletionRequestMessage {
+            role: Role::User,
+            content: Some(text.to_string()),
+            name: None,
+            function_call: None,
+        };
+
+        let request = CreateChatCompletionRequestArgs::default()
+            .model("gpt-4o-mini")
+            .messages(vec![system_message, user_message])
+            .temperature(0.2)
+            .build()
+            .context("Failed to build punctuation request")?;
+
+        let response = client
+            .chat()
+            .create(request)
+            .await
+            .context("Failed to get punctuation response")?;
+
+        response
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.clone())
+            .ok_or_else(|| Box::<dyn Error>::from(anyhow!("No response from OpenAI")))
     }
 }

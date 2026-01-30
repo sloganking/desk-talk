@@ -90,6 +90,11 @@ fn capitalize_first_letter(s: &mut String) {
     }
 }
 
+/// Returns true if the text is missing sentence-ending punctuation (. ! ?)
+fn needs_punctuation_fix(text: &str) -> bool {
+    !text.chars().any(|c| matches!(c, '.' | '!' | '?'))
+}
+
 pub struct TranscriptionEngine {
     app_state: AppState,
     stop_signal: Arc<Mutex<bool>>,
@@ -268,6 +273,31 @@ impl TranscriptionEngine {
                             };
 
                             // Post-processing
+                            // Remove ellipses first (Whisper sometimes adds these)
+                            transcription = transcription.replace("...", "");
+
+                            // Fix punctuation if enabled and text is missing it
+                            if opt.punctuation && needs_punctuation_fix(&transcription) {
+                                println!("Transcription missing punctuation, fixing...");
+                                match runtime.block_on(trans::fix_punctuation_with_openai(
+                                    &client,
+                                    &transcription,
+                                )) {
+                                    Ok(fixed) => {
+                                        println!("Punctuation added.");
+                                        transcription = fixed;
+                                    }
+                                    Err(err) => {
+                                        // Punctuation fix failed - play error sound but continue with original text
+                                        println!(
+                                            "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
+                                            err
+                                        );
+                                        play_failure_sound();
+                                    }
+                                }
+                            }
+
                             if opt.cap_first {
                                 capitalize_first_letter(&mut transcription);
                             }
@@ -280,6 +310,7 @@ impl TranscriptionEngine {
                                 }
                             }
 
+                            // Remove ellipses again (LLM might add them)
                             transcription = transcription.replace("...", "");
 
                             if transcription.is_empty() {
