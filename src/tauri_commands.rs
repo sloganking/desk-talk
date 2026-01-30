@@ -1,7 +1,22 @@
-use crate::app_state::{AppState, Statistics};
+use crate::app_state::AppState;
 use crate::config::AppConfig;
 use crate::easy_rdev_key::PTTKey;
 use cpal::traits::{DeviceTrait, HostTrait};
+
+/// Combined statistics response for the UI
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CombinedStatistics {
+    // Session stats
+    pub total_words: usize,
+    pub total_recording_time_secs: f64,
+    pub average_wpm: f64,
+    pub session_count: usize,
+    // Lifetime stats
+    pub lifetime_total_words: usize,
+    pub lifetime_total_recording_time_secs: f64,
+    pub lifetime_average_wpm: f64,
+    pub lifetime_session_count: usize,
+}
 
 #[tauri::command]
 pub fn get_config(state: tauri::State<AppState>) -> Result<AppConfig, String> {
@@ -56,8 +71,22 @@ pub fn save_config(state: tauri::State<AppState>, incoming: AppConfig) -> Result
 }
 
 #[tauri::command]
-pub fn get_statistics(state: tauri::State<AppState>) -> Result<Statistics, String> {
-    Ok(state.get_statistics())
+pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistics, String> {
+    let session = state.get_statistics();
+    let lifetime = state.get_lifetime_statistics();
+
+    Ok(CombinedStatistics {
+        // Session stats
+        total_words: session.total_words,
+        total_recording_time_secs: session.total_recording_time_secs,
+        average_wpm: session.average_wpm,
+        session_count: session.session_count,
+        // Lifetime stats
+        lifetime_total_words: lifetime.total_words,
+        lifetime_total_recording_time_secs: lifetime.total_recording_time_secs,
+        lifetime_average_wpm: lifetime.average_wpm(),
+        lifetime_session_count: lifetime.session_count,
+    })
 }
 
 #[tauri::command]

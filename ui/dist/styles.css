@@ -296,6 +296,15 @@ footer {
     opacity: 0.9;
 }
 
+.stat-lifetime {
+    font-size: 13px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    color: #a8e6cf;
+    font-weight: 500;
+}
+
 .license-status {
     background: #f5f7fa;
     padding: 20px;
@@ -391,6 +400,11 @@ body.dark-mode .stat-value {
 
 body.dark-mode .stat-label {
     color: #a0a0a0;
+}
+
+body.dark-mode .stat-lifetime {
+    color: #4ade80;
+    border-top-color: rgba(255, 255, 255, 0.1);
 }
 
 body.dark-mode .license-status {
