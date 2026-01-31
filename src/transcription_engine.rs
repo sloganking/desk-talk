@@ -260,12 +260,12 @@ impl TranscriptionEngine {
                                 ))
                             };
 
-                            let _ = tick_tx.send(());
-                            let _ = tick_handle.join();
-
                             let mut transcription = match transcription_result {
                                 Ok(transcription) => transcription,
                                 Err(err) => {
+                                    // Stop ticking before playing error sound
+                                    let _ = tick_tx.send(());
+                                    let _ = tick_handle.join();
                                     eprintln!("Error: Failed to transcribe audio: {:?}", err);
                                     play_failure_sound();
                                     continue;
@@ -277,6 +277,7 @@ impl TranscriptionEngine {
                             transcription = transcription.replace("...", "");
 
                             // Fix punctuation if enabled and text is missing it
+                            // Note: tick sound continues during this API call
                             if opt.punctuation && needs_punctuation_fix(&transcription) {
                                 println!("Transcription missing punctuation, fixing...");
                                 match runtime.block_on(trans::fix_punctuation_with_openai(
@@ -288,15 +289,19 @@ impl TranscriptionEngine {
                                         transcription = fixed;
                                     }
                                     Err(err) => {
-                                        // Punctuation fix failed - play error sound but continue with original text
+                                        // Punctuation fix failed - continue with original text
+                                        // (don't play error sound yet, tick is still going)
                                         println!(
                                             "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
                                             err
                                         );
-                                        play_failure_sound();
                                     }
                                 }
                             }
+                            
+                            // Stop ticking now that all API calls are complete
+                            let _ = tick_tx.send(());
+                            let _ = tick_handle.join();
 
                             if opt.cap_first {
                                 capitalize_first_letter(&mut transcription);

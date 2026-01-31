@@ -351,12 +351,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         ))
                                     };
 
-                                    let _ = tick_tx.send(());
-                                    let _ = tick_handle.join();
-
                                     let mut transcription = match transcription_result {
                                         Ok(transcription) => transcription,
                                         Err(err) => {
+                                            // Stop ticking before playing error sound
+                                            let _ = tick_tx.send(());
+                                            let _ = tick_handle.join();
                                             println!(
                                                 "Error: Failed to transcribe audio: {:?}",
                                                 err
@@ -367,6 +367,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     };
 
                                     // Transcription post processing
+                                    // Note: tick sound continues during punctuation API call
                                     {
                                         // Remove ellipses first (Whisper sometimes adds these)
                                         transcription = transcription.replace("...", "");
@@ -388,12 +389,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                                                     transcription = fixed;
                                                 }
                                                 Err(err) => {
-                                                    // Punctuation fix failed - play error sound but continue with original text
+                                                    // Punctuation fix failed - continue with original text
                                                     println!(
                                                         "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
                                                         err
                                                     );
-                                                    play_failure_sound();
                                                 }
                                             }
                                         }
@@ -413,6 +413,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         // Remove ellipses again (LLM might add them)
                                         transcription = transcription.replace("...", "");
                                     }
+
+                                    // Stop ticking now that all API calls are complete
+                                    let _ = tick_tx.send(());
+                                    let _ = tick_handle.join();
 
                                     if transcription.is_empty() {
                                         println!("No transcription");
