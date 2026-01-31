@@ -290,8 +290,29 @@ function renderDailyChart(dailyData) {
     });
     
     function updateTooltipPosition(e) {
-        const x = e.clientX + 15;
-        const y = e.clientY - 10;
+        const tooltipWidth = tooltip.offsetWidth || 200;
+        const tooltipHeight = tooltip.offsetHeight || 100;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        // Position to the right of cursor by default
+        let x = e.clientX + 15;
+        let y = e.clientY - 10;
+        
+        // If tooltip would go off right edge, flip to left of cursor
+        if (x + tooltipWidth > windowWidth - 10) {
+            x = e.clientX - tooltipWidth - 15;
+        }
+        
+        // If tooltip would go off bottom edge, flip up
+        if (y + tooltipHeight > windowHeight - 10) {
+            y = e.clientY - tooltipHeight - 10;
+        }
+        
+        // Ensure it doesn't go off left or top edge
+        x = Math.max(10, x);
+        y = Math.max(10, y);
+        
         tooltip.style.left = `${x}px`;
         tooltip.style.top = `${y}px`;
     }
