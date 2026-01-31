@@ -477,6 +477,18 @@ body.dark-mode .stat-lifetime {
     border-top-color: rgba(255, 255, 255, 0.1);
 }
 
+.stat-daily {
+    font-size: 12px;
+    margin-top: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    font-style: italic;
+    cursor: help;
+}
+
+body.dark-mode .stat-daily {
+    color: rgba(255, 255, 255, 0.7);
+}
+
 /* Speed multiplier badge */
 .speed-multiplier {
     display: inline-block;

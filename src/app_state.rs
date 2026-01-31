@@ -33,6 +33,9 @@ pub struct LifetimeStatistics {
     pub session_count: usize,
     // Store sum of all WPMs to calculate accurate average
     pub wpm_sum: f64,
+    // Unix timestamp of first transcription (for calculating daily averages)
+    #[serde(default)]
+    pub first_recorded_at: Option<i64>,
 }
 
 impl LifetimeStatistics {
@@ -71,6 +74,24 @@ impl LifetimeStatistics {
             self.wpm_sum / (self.session_count as f64)
         } else {
             0.0
+        }
+    }
+
+    /// Returns the number of days since tracking started (minimum 1)
+    pub fn days_since_start(&self) -> f64 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        
+        if let Some(first_at) = self.first_recorded_at {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(first_at);
+            
+            let elapsed_secs = (now - first_at).max(0) as f64;
+            let days = elapsed_secs / 86400.0; // seconds per day
+            days.max(1.0) // minimum 1 day to avoid division issues
+        } else {
+            1.0 // No data yet, assume 1 day
         }
     }
 }
@@ -130,11 +151,22 @@ impl AppState {
         // Update lifetime statistics and save to disk
         {
             let mut lifetime = self.lifetime_statistics.write();
+            
+            // Set first_recorded_at on first transcription
+            if lifetime.first_recorded_at.is_none() {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                lifetime.first_recorded_at = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .ok();
+                println!("First transcription recorded at: {:?}", lifetime.first_recorded_at);
+            }
+            
             lifetime.total_words += words;
             lifetime.total_recording_time_secs += duration_secs;
             lifetime.session_count += 1;
             lifetime.wpm_sum += wpm;
-
+            
             // Save to disk (fire and forget - don't block on errors)
             if let Err(e) = lifetime.save() {
                 eprintln!("Warning: Failed to save lifetime statistics: {}", e);

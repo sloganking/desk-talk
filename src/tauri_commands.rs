@@ -18,6 +18,9 @@ pub struct CombinedStatistics {
     pub lifetime_average_wpm: f64,
     pub lifetime_session_count: usize,
     pub lifetime_time_saved_secs: f64,
+    // Daily averages
+    pub days_tracked: f64,
+    pub avg_time_saved_per_day_secs: f64,
     // User's typing speed for reference
     pub typing_wpm: u32,
 }
@@ -103,6 +106,10 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         typing_wpm,
     );
 
+    // Calculate daily average
+    let days_tracked = lifetime.days_since_start();
+    let avg_time_saved_per_day = lifetime_time_saved / days_tracked;
+    
     Ok(CombinedStatistics {
         // Session stats
         total_words: session.total_words,
@@ -116,6 +123,9 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         lifetime_average_wpm: lifetime.average_wpm(),
         lifetime_session_count: lifetime.session_count,
         lifetime_time_saved_secs: lifetime_time_saved,
+        // Daily averages
+        days_tracked,
+        avg_time_saved_per_day_secs: avg_time_saved_per_day,
         // Config
         typing_wpm,
     })

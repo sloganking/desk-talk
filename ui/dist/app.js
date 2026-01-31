@@ -297,6 +297,16 @@ async function loadStatistics() {
             lifetimeTimeSavedPercentEl.textContent = '';
         }
         
+        // Daily average
+        const dailyAverageEl = document.getElementById('dailyAverage');
+        if (stats.avg_time_saved_per_day_secs > 0 && stats.days_tracked >= 1) {
+            const days = Math.floor(stats.days_tracked);
+            const avgPerDay = formatDuration(stats.avg_time_saved_per_day_secs);
+            dailyAverageEl.textContent = `📅 Avg: ${avgPerDay}/day (over ${days} day${days !== 1 ? 's' : ''})`;
+        } else {
+            dailyAverageEl.textContent = '';
+        }
+        
         // Update typing WPM input if it hasn't been touched
         const typingInput = document.getElementById('typingWPM');
         if (typingInput && !typingInput.dataset.userEdited) {
