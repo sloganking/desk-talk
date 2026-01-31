@@ -25,6 +25,14 @@ pub struct Statistics {
     pub session_count: usize,
 }
 
+/// Statistics for a single day
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct DailyStats {
+    pub words: usize,
+    pub recording_time_secs: f64,
+    pub transcription_count: usize,
+}
+
 /// Lifetime statistics (persisted to disk)
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct LifetimeStatistics {
@@ -36,6 +44,9 @@ pub struct LifetimeStatistics {
     // Unix timestamp of first transcription (for calculating daily averages)
     #[serde(default)]
     pub first_recorded_at: Option<i64>,
+    // Daily breakdown (date string "YYYY-MM-DD" -> stats)
+    #[serde(default)]
+    pub daily_stats: std::collections::HashMap<String, DailyStats>,
 }
 
 impl LifetimeStatistics {
@@ -150,6 +161,8 @@ impl AppState {
 
         // Update lifetime statistics and save to disk
         {
+            use chrono::Local;
+            
             let mut lifetime = self.lifetime_statistics.write();
             
             // Set first_recorded_at on first transcription
@@ -166,6 +179,13 @@ impl AppState {
             lifetime.total_recording_time_secs += duration_secs;
             lifetime.session_count += 1;
             lifetime.wpm_sum += wpm;
+            
+            // Update daily stats
+            let today = Local::now().format("%Y-%m-%d").to_string();
+            let daily = lifetime.daily_stats.entry(today).or_default();
+            daily.words += words;
+            daily.recording_time_secs += duration_secs;
+            daily.transcription_count += 1;
             
             // Save to disk (fire and forget - don't block on errors)
             if let Err(e) = lifetime.save() {

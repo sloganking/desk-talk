@@ -234,6 +234,69 @@ function formatNumber(num) {
     return num.toLocaleString();
 }
 
+// Render daily chart
+function renderDailyChart(dailyData) {
+    const container = document.getElementById('dailyChart');
+    const tooltip = document.getElementById('chartTooltip');
+    if (!container || !tooltip) return;
+    
+    // Find max time saved for scaling
+    const maxTimeSaved = Math.max(...dailyData.map(d => d.time_saved_secs), 1);
+    
+    // Clear and rebuild
+    container.innerHTML = '';
+    
+    dailyData.forEach(day => {
+        const bar = document.createElement('div');
+        bar.className = 'chart-bar';
+        
+        if (day.time_saved_secs > 0) {
+            const heightPercent = (day.time_saved_secs / maxTimeSaved) * 100;
+            bar.style.height = `${Math.max(heightPercent, 5)}%`;
+        } else {
+            bar.classList.add('empty');
+            bar.style.height = '2px';
+        }
+        
+        // Store data for tooltip
+        bar.dataset.date = day.display_date;
+        bar.dataset.words = day.words;
+        bar.dataset.timeSaved = day.time_saved_secs;
+        bar.dataset.transcriptions = day.transcription_count;
+        
+        // Tooltip events
+        bar.addEventListener('mouseenter', (e) => {
+            const words = parseInt(bar.dataset.words);
+            const timeSaved = parseFloat(bar.dataset.timeSaved);
+            const transcriptions = parseInt(bar.dataset.transcriptions);
+            
+            tooltip.innerHTML = `
+                <div class="chart-tooltip-date">${bar.dataset.date}</div>
+                <div class="chart-tooltip-row">⏱️ Time saved: ${formatDuration(timeSaved)}</div>
+                <div class="chart-tooltip-row">📝 Words: ${formatNumber(words)}</div>
+                <div class="chart-tooltip-row">🎤 Transcriptions: ${transcriptions}</div>
+            `;
+            tooltip.classList.add('visible');
+            updateTooltipPosition(e);
+        });
+        
+        bar.addEventListener('mousemove', updateTooltipPosition);
+        
+        bar.addEventListener('mouseleave', () => {
+            tooltip.classList.remove('visible');
+        });
+        
+        container.appendChild(bar);
+    });
+    
+    function updateTooltipPosition(e) {
+        const x = e.clientX + 15;
+        const y = e.clientY - 10;
+        tooltip.style.left = `${x}px`;
+        tooltip.style.top = `${y}px`;
+    }
+}
+
 // Load statistics
 async function loadStatistics() {
     try {
@@ -302,10 +365,14 @@ async function loadStatistics() {
         if (stats.avg_time_saved_per_day_secs > 0 && stats.days_tracked >= 1) {
             const days = Math.floor(stats.days_tracked);
             const avgPerDay = formatDuration(stats.avg_time_saved_per_day_secs);
-            dailyAverageEl.textContent = `📅 Avg: ${avgPerDay}/day (over ${days} day${days !== 1 ? 's' : ''})`;
+            const avgWords = Math.round(stats.avg_words_per_day);
+            dailyAverageEl.textContent = `📅 Avg: ${avgPerDay} saved, ${formatNumber(avgWords)} words/day (over ${days} day${days !== 1 ? 's' : ''})`;
         } else {
             dailyAverageEl.textContent = '';
         }
+        
+        // Render daily chart
+        renderDailyChart(stats.daily_chart || []);
         
         // Update typing WPM input if it hasn't been touched
         const typingInput = document.getElementById('typingWPM');

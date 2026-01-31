@@ -3,6 +3,17 @@ use crate::config::AppConfig;
 use crate::easy_rdev_key::PTTKey;
 use cpal::traits::{DeviceTrait, HostTrait};
 
+/// Daily data point for the chart
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DailyDataPoint {
+    pub date: String,           // "YYYY-MM-DD"
+    pub display_date: String,   // "Jan 15" for display
+    pub words: usize,
+    pub recording_time_secs: f64,
+    pub time_saved_secs: f64,
+    pub transcription_count: usize,
+}
+
 /// Combined statistics response for the UI
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CombinedStatistics {
@@ -21,6 +32,9 @@ pub struct CombinedStatistics {
     // Daily averages
     pub days_tracked: f64,
     pub avg_time_saved_per_day_secs: f64,
+    pub avg_words_per_day: f64,
+    // Chart data (last 30 days)
+    pub daily_chart: Vec<DailyDataPoint>,
     // User's typing speed for reference
     pub typing_wpm: u32,
 }
@@ -79,6 +93,8 @@ pub fn save_config(state: tauri::State<AppState>, incoming: AppConfig) -> Result
 
 #[tauri::command]
 pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistics, String> {
+    use chrono::{Days, Local};
+    
     let session = state.get_statistics();
     let lifetime = state.get_lifetime_statistics();
     let config = state.config.read();
@@ -109,6 +125,35 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
     // Calculate daily average
     let days_tracked = lifetime.days_since_start();
     let avg_time_saved_per_day = lifetime_time_saved / days_tracked;
+    let avg_words_per_day = (lifetime.total_words as f64) / days_tracked;
+    
+    // Build chart data for last 30 days
+    let today = Local::now().date_naive();
+    let mut daily_chart = Vec::new();
+    
+    for i in (0..30).rev() {
+        let date = today.checked_sub_days(Days::new(i)).unwrap_or(today);
+        let date_str = date.format("%Y-%m-%d").to_string();
+        let display_date = date.format("%b %d").to_string();
+        
+        let (words, recording_time_secs, transcription_count) = 
+            if let Some(stats) = lifetime.daily_stats.get(&date_str) {
+                (stats.words, stats.recording_time_secs, stats.transcription_count)
+            } else {
+                (0, 0.0, 0)
+            };
+        
+        let day_time_saved = calc_time_saved(words, recording_time_secs, typing_wpm);
+        
+        daily_chart.push(DailyDataPoint {
+            date: date_str,
+            display_date,
+            words,
+            recording_time_secs,
+            time_saved_secs: day_time_saved,
+            transcription_count,
+        });
+    }
     
     Ok(CombinedStatistics {
         // Session stats
@@ -126,6 +171,9 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         // Daily averages
         days_tracked,
         avg_time_saved_per_day_secs: avg_time_saved_per_day,
+        avg_words_per_day,
+        // Chart data
+        daily_chart,
         // Config
         typing_wpm,
     })
