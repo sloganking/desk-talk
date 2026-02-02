@@ -298,10 +298,20 @@ impl TranscriptionEngine {
                                     }
                                 }
                             }
-                            
+
                             // Stop ticking now that all API calls are complete
                             let _ = tick_tx.send(());
                             let _ = tick_handle.join();
+
+                            // Add period at end if enabled and text doesn't end with punctuation
+                            if opt.period {
+                                let trimmed = transcription.trim_end();
+                                if let Some(last_char) = trimmed.chars().last() {
+                                    if !matches!(last_char, '.' | '!' | '?') {
+                                        transcription = format!("{}.", trimmed);
+                                    }
+                                }
+                            }
 
                             if opt.cap_first {
                                 capitalize_first_letter(&mut transcription);

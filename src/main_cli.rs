@@ -69,6 +69,10 @@ struct Opt {
     #[arg(long)]
     punctuation: bool,
 
+    /// Always add a period at the end if the transcription doesn't already end with punctuation (.!?)
+    #[arg(long)]
+    period: bool,
+
     /// The push to talk key.
     /// Use this if you want to use a key that is not supported by the PTTKey enum.
     #[arg(short, long, conflicts_with("ptt_key"))]
@@ -394,6 +398,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                                                         "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
                                                         err
                                                     );
+                                                }
+                                            }
+                                        }
+
+                                        // Add period at end if enabled and text doesn't end with punctuation
+                                        if opt.period {
+                                            let trimmed = transcription.trim_end();
+                                            if let Some(last_char) = trimmed.chars().last() {
+                                                if !matches!(last_char, '.' | '!' | '?') {
+                                                    // Remove trailing whitespace, add period
+                                                    transcription = format!("{}.", trimmed);
                                                 }
                                             }
                                         }

@@ -130,6 +130,7 @@ async function loadConfig() {
         document.getElementById('capFirst').checked = config.cap_first || false;
         document.getElementById('space').checked = config.space || false;
         document.getElementById('punctuation').checked = config.punctuation || false;
+        document.getElementById('period').checked = config.period || false;
         document.getElementById('typeChars').checked = config.type_chars || false;
         document.getElementById('autoStart').checked = config.auto_start || false;
         document.getElementById('startMinimized').checked = config.start_minimized || false;
@@ -428,6 +429,7 @@ async function saveConfig() {
                 cap_first: document.getElementById('capFirst').checked,
                 space: document.getElementById('space').checked,
                 punctuation: document.getElementById('punctuation').checked,
+                period: document.getElementById('period').checked,
                 type_chars: document.getElementById('typeChars').checked,
                 auto_start: document.getElementById('autoStart').checked,
                 start_minimized: document.getElementById('startMinimized').checked,
@@ -472,6 +474,7 @@ async function saveConfig() {
             cap_first: document.getElementById('capFirst').checked,
             space: document.getElementById('space').checked,
             punctuation: document.getElementById('punctuation').checked,
+            period: document.getElementById('period').checked,
             type_chars: document.getElementById('typeChars').checked,
             auto_start: document.getElementById('autoStart').checked,
             start_minimized: document.getElementById('startMinimized').checked,

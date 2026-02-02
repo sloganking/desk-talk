@@ -55,6 +55,11 @@
                     <span class="info-icon" title="If transcription has no periods, question marks, or exclamation points, uses AI to add punctuation. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label class="checkbox">
+                    <input type="checkbox" id="period">
+                    <span>Always end with period</span>
+                    <span class="info-icon" title="Adds a period at the end if the transcription doesn't already end with punctuation (.!?). Useful when Whisper doesn't know if you're finished speaking." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                </label>
+                <label class="checkbox">
                     <input type="checkbox" id="typeChars">
                     <span>Type characters instead of pasting</span>
                     <span class="info-icon" title="Slower but works with applications that don't understand Ctrl+V" onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>

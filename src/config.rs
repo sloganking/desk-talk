@@ -20,6 +20,9 @@ pub struct AppConfig {
     pub type_chars: bool,
     #[serde(default)]
     pub punctuation: bool,
+    /// Always add a period at the end if text doesn't end with .!?
+    #[serde(default)]
+    pub period: bool,
     #[serde(default)]
     pub auto_start: bool,
     #[serde(default)]
@@ -49,6 +52,7 @@ impl Default for AppConfig {
             space: false,
             type_chars: false,
             punctuation: false,
+            period: false,
             auto_start: false,
             start_minimized: false,
             dark_mode: false,
