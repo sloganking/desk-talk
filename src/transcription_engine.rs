@@ -188,9 +188,11 @@ impl TranscriptionEngine {
 
         let tmp_dir = tempdir().unwrap();
         let voice_tmp_path = tmp_dir.path().join("voice_tmp.wav");
+        let voice_retry_path = tmp_dir.path().join("voice_retry.wav");
 
         let mut recording_start = std::time::SystemTime::now();
         let mut key_pressed = false;
+        let mut last_transcription_failed = false;
         let key_to_check = opt.get_ptt_key().unwrap();
 
         println!(
@@ -241,7 +243,18 @@ impl TranscriptionEngine {
                             }
                         }
 
-                        if elapsed.as_secs_f32() > 0.2 {
+                        // Quick tap after a failure retries the last audio
+                        let (audio_path, is_retry) = if elapsed.as_secs_f32() > 0.2 {
+                            (Some(voice_tmp_path.clone()), false)
+                        } else if last_transcription_failed && voice_retry_path.exists() {
+                            println!("Quick tap detected - retrying last failed transcription");
+                            (Some(voice_retry_path.clone()), true)
+                        } else {
+                            println!("Recording too short");
+                            (None, false)
+                        };
+
+                        if let Some(audio_path) = audio_path {
                             let (tick_tx, tick_rx) = mpsc::channel();
                             let tick_handle = thread::spawn(move || tick_loop(tick_rx));
 
@@ -251,11 +264,11 @@ impl TranscriptionEngine {
                                     .as_ref()
                                     .and_then(|m| Self::parse_model(m))
                                     .expect("Valid model required");
-                                trans::transcribe_local(&voice_tmp_path, model)
+                                trans::transcribe_local(&audio_path, model)
                             } else {
                                 runtime.block_on(trans::transcribe_with_retry(
                                     &client,
-                                    &voice_tmp_path,
+                                    &audio_path,
                                     3,
                                 ))
                             };
@@ -263,21 +276,22 @@ impl TranscriptionEngine {
                             let mut transcription = match transcription_result {
                                 Ok(transcription) => transcription,
                                 Err(err) => {
-                                    // Stop ticking before playing error sound
                                     let _ = tick_tx.send(());
                                     let _ = tick_handle.join();
                                     eprintln!("Error: Failed to transcribe audio: {:?}", err);
+                                    if !is_retry {
+                                        if let Err(e) = std::fs::copy(&voice_tmp_path, &voice_retry_path) {
+                                            eprintln!("Warning: Failed to save audio for retry: {:?}", e);
+                                        }
+                                    }
+                                    last_transcription_failed = true;
                                     play_failure_sound();
                                     continue;
                                 }
                             };
 
-                            // Post-processing
-                            // Remove ellipses first (Whisper sometimes adds these)
                             transcription = transcription.replace("...", "");
 
-                            // Fix punctuation if enabled and text is missing it
-                            // Note: tick sound continues during this API call
                             if opt.punctuation && needs_punctuation_fix(&transcription) {
                                 println!("Transcription missing punctuation, fixing...");
                                 match runtime.block_on(trans::fix_punctuation_with_openai(
@@ -289,8 +303,6 @@ impl TranscriptionEngine {
                                         transcription = fixed;
                                     }
                                     Err(err) => {
-                                        // Punctuation fix failed - continue with original text
-                                        // (don't play error sound yet, tick is still going)
                                         println!(
                                             "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
                                             err
@@ -299,11 +311,9 @@ impl TranscriptionEngine {
                                 }
                             }
 
-                            // Stop ticking now that all API calls are complete
                             let _ = tick_tx.send(());
                             let _ = tick_handle.join();
 
-                            // Add period at end if enabled and text doesn't end with punctuation
                             if opt.period {
                                 let trimmed = transcription.trim_end();
                                 if let Some(last_char) = trimmed.chars().last() {
@@ -325,7 +335,6 @@ impl TranscriptionEngine {
                                 }
                             }
 
-                            // Remove ellipses again (LLM might add them)
                             transcription = transcription.replace("...", "");
 
                             if transcription.is_empty() {
@@ -335,7 +344,6 @@ impl TranscriptionEngine {
                             }
 
                             let word_count = transcription.split_whitespace().count();
-                            let duration_secs = elapsed.as_secs_f64();
 
                             if opt.type_chars {
                                 enigo.key_sequence(&transcription);
@@ -362,7 +370,10 @@ impl TranscriptionEngine {
                                 }
                             }
 
-                            if duration_secs > 0.0 {
+                            last_transcription_failed = false;
+
+                            if !is_retry && elapsed.as_secs_f64() > 0.0 {
+                                let duration_secs = elapsed.as_secs_f64();
                                 let wpm = (word_count as f64) * 60.0 / duration_secs;
                                 wpm_history.push_back(wpm);
                                 wpm_sum += wpm;
@@ -384,8 +395,6 @@ impl TranscriptionEngine {
                                     wpm, avg_wpm, word_count
                                 );
                             }
-                        } else {
-                            println!("Recording too short");
                         }
                     }
                 }
