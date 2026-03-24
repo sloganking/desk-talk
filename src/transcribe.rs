@@ -142,8 +142,9 @@ pub mod trans {
     }
 
     /// Sends `parallel` transcription requests simultaneously and returns the
-    /// first successful result, cancelling the rest. When `parallel` is 1 this
-    /// falls back to the normal sequential retry logic.
+    /// first successful result. When `parallel` is 1 this falls back to the
+    /// normal sequential retry logic. Each lane runs in its own thread with
+    /// its own tokio runtime for true parallelism.
     pub async fn transcribe_racing(
         client: &Client<OpenAIConfig>,
         input: &Path,
@@ -157,41 +158,61 @@ pub mod trans {
 
         eprintln!("Racing {} parallel transcription requests", parallel);
 
-        let futures: Vec<_> = (0..parallel)
-            .map(|i| {
-                Box::pin(async move {
-                    match future::timeout(Duration::from_secs(10), transcribe(client, input)).await
+        let mp3_input = if input.extension().unwrap_or_default() != "mp3" {
+            let tmp_dir = tempdir().context("Failed to create temp dir.")?;
+            let tmp_mp3_path = tmp_dir.path().join("racing_tmp.mp3");
+            let mp3 = move_audio_to_mp3(input, &tmp_mp3_path)
+                .context("Failed to convert audio to mp3.")?;
+            std::mem::forget(tmp_dir);
+            mp3
+        } else {
+            PathBuf::from(input)
+        };
+
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        for i in 0..parallel {
+            let client = client.clone();
+            let input = mp3_input.clone();
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                let result = rt.block_on(async {
+                    match tokio::time::timeout(
+                        Duration::from_secs(10),
+                        transcribe(&client, &input),
+                    )
+                    .await
                     {
-                        Ok(res) => match res {
-                            Ok(text) => {
-                                eprintln!("Parallel lane {} succeeded", i + 1);
-                                Ok(text)
-                            }
-                            Err(e) => {
-                                eprintln!("Parallel lane {} failed: {:?}", i + 1, e);
-                                Err(e)
-                            }
-                        },
+                        Ok(Ok(text)) => {
+                            eprintln!("Parallel lane {} succeeded", i + 1);
+                            Ok(text)
+                        }
+                        Ok(Err(e)) => {
+                            eprintln!("Parallel lane {} failed: {}", i + 1, e);
+                            Err(format!("{}", e))
+                        }
                         Err(_) => {
                             eprintln!("Parallel lane {} timed out", i + 1);
-                            Err(anyhow!("Timeout").into())
+                            Err("Timeout".to_string())
                         }
                     }
-                })
-            })
-            .collect();
-
-        let mut remaining = futures;
-        while !remaining.is_empty() {
-            let (result, _index, rest) = futures::future::select_all(remaining).await;
-            if let Ok(text) = result {
-                drop(rest);
-                return Ok(text);
-            }
-            remaining = rest;
+                });
+                let _ = tx.send(result);
+            });
         }
 
-        Err(anyhow!("All {} parallel transcription attempts failed", parallel).into())
+        drop(tx);
+
+        let mut last_err = String::from("Unknown error");
+        while let Ok(result) = rx.recv() {
+            match result {
+                Ok(text) => return Ok(text),
+                Err(e) => last_err = e,
+            }
+        }
+
+        Err(anyhow!("All {} parallel attempts failed: {}", parallel, last_err).into())
     }
 
     fn get_model_path(model: &ModelType) -> Result<std::path::PathBuf, Box<dyn Error>> {

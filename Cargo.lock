@@ -1352,7 +1352,6 @@ dependencies = [
  "dotenvy",
  "enigo",
  "flume",
- "futures",
  "hound",
  "humantime",
  "keyring",
