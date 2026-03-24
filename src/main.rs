@@ -243,11 +243,25 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
 
 fn main() {
     // Load configuration
-    let config = AppConfig::load().unwrap_or_default();
+    let mut config = AppConfig::load().unwrap_or_default();
     println!(
         "Main: Initial config has API key: {}",
         config.api_key.is_some()
     );
+
+    // Parse --parallel flag from CLI args (overrides config)
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(pos) = args.iter().position(|a| a == "--parallel") {
+        if let Some(val) = args.get(pos + 1) {
+            if let Ok(n) = val.parse::<usize>() {
+                config.parallel = n.clamp(1, 5);
+                println!("Parallel transcription set to {} via CLI", config.parallel);
+            }
+        }
+    }
+
+    println!("Parallel transcription: {}", config.parallel);
+
     let app_state = AppState::new(config);
 
     tauri::Builder::default()
