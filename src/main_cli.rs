@@ -73,6 +73,12 @@ struct Opt {
     #[arg(long)]
     period: bool,
 
+    /// Send multiple transcription requests in parallel and use the first
+    /// result that comes back. Higher values reduce latency at the cost of
+    /// extra API usage (e.g. 3 triples cost). Defaults to 1 (no parallelism).
+    #[arg(long, default_value_t = 1)]
+    parallel: usize,
+
     /// The push to talk key.
     /// Use this if you want to use a key that is not supported by the PTTKey enum.
     #[arg(short, long, conflicts_with("ptt_key"))]
@@ -348,10 +354,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             .expect("--model required when --local is used");
                                         trans::transcribe_local(&voice_tmp_path, model.into())
                                     } else {
-                                        runtime.block_on(trans::transcribe_with_retry(
+                                        runtime.block_on(trans::transcribe_racing(
                                             &client,
                                             &voice_tmp_path,
-                                            3,
+                                            opt.parallel,
                                         ))
                                     };
 

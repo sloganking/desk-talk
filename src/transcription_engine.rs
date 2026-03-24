@@ -266,10 +266,10 @@ impl TranscriptionEngine {
                                     .expect("Valid model required");
                                 trans::transcribe_local(&audio_path, model)
                             } else {
-                                runtime.block_on(trans::transcribe_with_retry(
+                                runtime.block_on(trans::transcribe_racing(
                                     &client,
                                     &audio_path,
-                                    3,
+                                    opt.parallel,
                                 ))
                             };
 

@@ -141,6 +141,59 @@ pub mod trans {
         Err(last_err.unwrap_or_else(|| Box::<dyn Error>::from(anyhow!("Unknown error"))))
     }
 
+    /// Sends `parallel` transcription requests simultaneously and returns the
+    /// first successful result, cancelling the rest. When `parallel` is 1 this
+    /// falls back to the normal sequential retry logic.
+    pub async fn transcribe_racing(
+        client: &Client<OpenAIConfig>,
+        input: &Path,
+        parallel: usize,
+    ) -> Result<String, Box<dyn Error>> {
+        let parallel = parallel.clamp(1, 5);
+
+        if parallel <= 1 {
+            return transcribe_with_retry(client, input, 3).await;
+        }
+
+        eprintln!("Racing {} parallel transcription requests", parallel);
+
+        let futures: Vec<_> = (0..parallel)
+            .map(|i| {
+                Box::pin(async move {
+                    match future::timeout(Duration::from_secs(10), transcribe(client, input)).await
+                    {
+                        Ok(res) => match res {
+                            Ok(text) => {
+                                eprintln!("Parallel lane {} succeeded", i + 1);
+                                Ok(text)
+                            }
+                            Err(e) => {
+                                eprintln!("Parallel lane {} failed: {:?}", i + 1, e);
+                                Err(e)
+                            }
+                        },
+                        Err(_) => {
+                            eprintln!("Parallel lane {} timed out", i + 1);
+                            Err(anyhow!("Timeout").into())
+                        }
+                    }
+                })
+            })
+            .collect();
+
+        let mut remaining = futures;
+        while !remaining.is_empty() {
+            let (result, _index, rest) = futures::future::select_all(remaining).await;
+            if let Ok(text) = result {
+                drop(rest);
+                return Ok(text);
+            }
+            remaining = rest;
+        }
+
+        Err(anyhow!("All {} parallel transcription attempts failed", parallel).into())
+    }
+
     fn get_model_path(model: &ModelType) -> Result<std::path::PathBuf, Box<dyn Error>> {
         let dirs = ProjectDirs::from("", "", "desk-talk")
             .ok_or_else(|| anyhow!("Unable to determine project directory"))?;

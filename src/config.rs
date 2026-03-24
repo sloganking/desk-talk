@@ -34,10 +34,17 @@ pub struct AppConfig {
     /// User's typing speed in words per minute (for calculating time saved)
     #[serde(default = "default_typing_wpm")]
     pub typing_wpm: u32,
+    /// Number of parallel transcription requests to race (1 = no parallelism)
+    #[serde(default = "default_parallel")]
+    pub parallel: usize,
 }
 
 fn default_typing_wpm() -> u32 {
     40 // Average typing speed
+}
+
+fn default_parallel() -> usize {
+    1
 }
 
 impl Default for AppConfig {
@@ -58,6 +65,7 @@ impl Default for AppConfig {
             dark_mode: false,
             api_key: None,
             typing_wpm: default_typing_wpm(),
+            parallel: default_parallel(),
         }
     }
 }
