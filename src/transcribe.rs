@@ -170,11 +170,16 @@ pub mod trans {
         };
 
         let (tx, rx) = std::sync::mpsc::channel();
+        let race_start = std::time::Instant::now();
+        let first_success_time: std::sync::Arc<std::sync::Mutex<Option<std::time::Instant>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(None));
 
         for i in 0..parallel {
             let client = client.clone();
             let input = mp3_input.clone();
             let tx = tx.clone();
+            let race_start = race_start;
+            let first_success_time = first_success_time.clone();
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 let result = rt.block_on(async {
@@ -185,15 +190,71 @@ pub mod trans {
                     .await
                     {
                         Ok(Ok(text)) => {
-                            eprintln!("Parallel lane {} succeeded", i + 1);
+                            let elapsed = race_start.elapsed();
+                            let mut first = first_success_time.lock().unwrap();
+                            if first.is_none() {
+                                *first = Some(std::time::Instant::now());
+                                eprintln!(
+                                    "Parallel lane {} succeeded ({:.2}s)",
+                                    i + 1,
+                                    elapsed.as_secs_f64()
+                                );
+                            } else {
+                                let wasted = first.unwrap().elapsed();
+                                eprintln!(
+                                    "Parallel lane {} succeeded ({:.2}s, +{:.2}s wasted)",
+                                    i + 1,
+                                    elapsed.as_secs_f64(),
+                                    wasted.as_secs_f64()
+                                );
+                            }
+                            drop(first);
                             Ok(text)
                         }
                         Ok(Err(e)) => {
-                            eprintln!("Parallel lane {} failed: {}", i + 1, e);
+                            let elapsed = race_start.elapsed();
+                            let extra = first_success_time
+                                .lock()
+                                .unwrap()
+                                .map(|t| t.elapsed().as_secs_f64());
+                            if let Some(wasted) = extra {
+                                eprintln!(
+                                    "Parallel lane {} failed ({:.2}s, +{:.2}s wasted): {}",
+                                    i + 1,
+                                    elapsed.as_secs_f64(),
+                                    wasted,
+                                    e
+                                );
+                            } else {
+                                eprintln!(
+                                    "Parallel lane {} failed ({:.2}s): {}",
+                                    i + 1,
+                                    elapsed.as_secs_f64(),
+                                    e
+                                );
+                            }
                             Err(format!("{}", e))
                         }
                         Err(_) => {
-                            eprintln!("Parallel lane {} timed out", i + 1);
+                            let elapsed = race_start.elapsed();
+                            let extra = first_success_time
+                                .lock()
+                                .unwrap()
+                                .map(|t| t.elapsed().as_secs_f64());
+                            if let Some(wasted) = extra {
+                                eprintln!(
+                                    "Parallel lane {} timed out ({:.2}s, +{:.2}s wasted)",
+                                    i + 1,
+                                    elapsed.as_secs_f64(),
+                                    wasted
+                                );
+                            } else {
+                                eprintln!(
+                                    "Parallel lane {} timed out ({:.2}s)",
+                                    i + 1,
+                                    elapsed.as_secs_f64()
+                                );
+                            }
                             Err("Timeout".to_string())
                         }
                     }
