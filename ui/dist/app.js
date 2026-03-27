@@ -148,6 +148,20 @@ async function loadConfig() {
             document.getElementById('typingWPM').value = config.typing_wpm;
         }
         
+        // Parallel racing
+        const parallelVal = config.parallel || 1;
+        const parallelEnabled = document.getElementById('parallelEnabled');
+        const parallelCountRow = document.getElementById('parallelCountRow');
+        const parallelCount = document.getElementById('parallelCount');
+        if (parallelVal > 1) {
+            parallelEnabled.checked = true;
+            parallelCountRow.style.display = '';
+            parallelCount.value = String(parallelVal);
+        } else {
+            parallelEnabled.checked = false;
+            parallelCountRow.style.display = 'none';
+        }
+        
         // Transcription settings
         const isLocal = config.use_local || false;
         document.getElementById('modeOpenAI').checked = !isLocal;
@@ -499,6 +513,7 @@ async function saveConfig() {
                 dark_mode: document.getElementById('darkMode').checked,
                 api_key: document.getElementById('apiKey').value || cachedApiKey || null,
                 typing_wpm: parseInt(document.getElementById('typingWPM').value) || 40,
+                parallel: document.getElementById('parallelEnabled').checked ? (parseInt(document.getElementById('parallelCount').value) || 3) : 1,
             };
             
             await invoke('save_config', { incoming: config });
@@ -544,6 +559,7 @@ async function saveConfig() {
             dark_mode: document.getElementById('darkMode').checked,
             api_key: apiKey || null,
             typing_wpm: parseInt(document.getElementById('typingWPM').value) || 40,
+            parallel: document.getElementById('parallelEnabled').checked ? (parseInt(document.getElementById('parallelCount').value) || 3) : 1,
         };
         
         console.log('Config payload being sent:', JSON.stringify({ ...config, api_key: apiKey ? '(hidden)' : null }, null, 2));
@@ -709,6 +725,11 @@ document.getElementById('darkMode').addEventListener('change', (e) => {
     }
 });
 
+// Parallel racing toggle
+document.getElementById('parallelEnabled').addEventListener('change', (e) => {
+    document.getElementById('parallelCountRow').style.display = e.target.checked ? '' : 'none';
+});
+
 // Event listeners
 document.getElementById('saveBtn').addEventListener('click', saveConfig);
 document.getElementById('saveBtn2').addEventListener('click', saveConfig);
@@ -798,6 +819,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadPTTKeys();
         await loadConfig();
         await loadAudioDevices();
+        await loadStatistics();
         console.log('Initialization complete');
     })();
 

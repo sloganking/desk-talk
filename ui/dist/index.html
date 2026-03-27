@@ -15,13 +15,13 @@
         </header>
 
         <div class="tabs">
-            <button class="tab-button active" data-tab="general">General</button>
+            <button class="tab-button active" data-tab="stats">Statistics</button>
+            <button class="tab-button" data-tab="general">General</button>
             <button class="tab-button" data-tab="transcription">Transcription</button>
-            <button class="tab-button" data-tab="stats">Statistics</button>
         </div>
 
         <!-- General Tab -->
-        <div class="tab-content active" id="general">
+        <div class="tab-content" id="general">
             <div class="section">
                 <h2>Push-to-Talk Key</h2>
                 <select id="pttKey">
@@ -77,6 +77,26 @@
                     <span>Dark mode</span>
                 </label>
             </div>
+
+            <div class="section">
+                <h2>Parallel Racing <span class="info-icon" title="Sends multiple transcription requests simultaneously and uses the fastest response. Reduces latency and improves reliability at the cost of extra API usage. For example, 3 means triple API cost but much faster and more reliable results.">ⓘ</span></h2>
+                <label class="checkbox">
+                    <input type="checkbox" id="parallelEnabled">
+                    <span>Enable parallel racing</span>
+                </label>
+                <div id="parallelCountRow" style="display: none; margin-top: 8px; margin-left: 28px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <span>Parallel requests:</span>
+                        <select id="parallelCount" style="width: auto;">
+                            <option value="2">2</option>
+                            <option value="3" selected>3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                    </label>
+                    <p class="hint">Higher = faster & more reliable, but costs more API credits</p>
+                </div>
+            </div>
             
             <footer>
                 <button id="saveBtn" class="btn btn-primary">Save Settings</button>
@@ -130,7 +150,7 @@
         </div>
 
         <!-- Statistics Tab -->
-        <div class="tab-content" id="stats">
+        <div class="tab-content active" id="stats">
             <div class="section typing-speed-section">
                 <h2>Your Typing Speed</h2>
                 <div class="typing-speed-input-row">
