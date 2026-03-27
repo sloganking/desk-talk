@@ -20,8 +20,27 @@ pub mod trans {
         process::Command,
     };
 
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::tempdir;
     use ureq;
+
+    struct RacingStats {
+        total_requests: AtomicUsize,
+        succeeded_requests: AtomicUsize,
+        failed_requests: AtomicUsize,
+        total_races: AtomicUsize,
+        succeeded_races: AtomicUsize,
+        failed_races: AtomicUsize,
+    }
+
+    static RACING_STATS: RacingStats = RacingStats {
+        total_requests: AtomicUsize::new(0),
+        succeeded_requests: AtomicUsize::new(0),
+        failed_requests: AtomicUsize::new(0),
+        total_races: AtomicUsize::new(0),
+        succeeded_races: AtomicUsize::new(0),
+        failed_races: AtomicUsize::new(0),
+    };
 
     /// Moves audio to mp3.
     /// Ignores output's extension if it is passed one.
@@ -174,6 +193,10 @@ pub mod trans {
         let first_success_time: std::sync::Arc<std::sync::Mutex<Option<std::time::Instant>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
 
+        RACING_STATS
+            .total_requests
+            .fetch_add(parallel, Ordering::Relaxed);
+
         for i in 0..parallel {
             let client = client.clone();
             let input = mp3_input.clone();
@@ -190,6 +213,9 @@ pub mod trans {
                     .await
                     {
                         Ok(Ok(text)) => {
+                            RACING_STATS
+                                .succeeded_requests
+                                .fetch_add(1, Ordering::Relaxed);
                             let elapsed = race_start.elapsed();
                             let mut first = first_success_time.lock().unwrap();
                             if first.is_none() {
@@ -212,6 +238,9 @@ pub mod trans {
                             Ok(text)
                         }
                         Ok(Err(e)) => {
+                            RACING_STATS
+                                .failed_requests
+                                .fetch_add(1, Ordering::Relaxed);
                             let elapsed = race_start.elapsed();
                             let extra = first_success_time
                                 .lock()
@@ -236,6 +265,9 @@ pub mod trans {
                             Err(format!("{}", e))
                         }
                         Err(_) => {
+                            RACING_STATS
+                                .failed_requests
+                                .fetch_add(1, Ordering::Relaxed);
                             let elapsed = race_start.elapsed();
                             let extra = first_success_time
                                 .lock()
@@ -265,15 +297,56 @@ pub mod trans {
 
         drop(tx);
 
+        let mut first_text: Option<String> = None;
         let mut last_err = String::from("Unknown error");
         while let Ok(result) = rx.recv() {
             match result {
-                Ok(text) => return Ok(text),
+                Ok(text) => {
+                    if first_text.is_none() {
+                        first_text = Some(text);
+                    }
+                }
                 Err(e) => last_err = e,
             }
         }
 
-        Err(anyhow!("All {} parallel attempts failed: {}", parallel, last_err).into())
+        RACING_STATS.total_races.fetch_add(1, Ordering::Relaxed);
+
+        if first_text.is_some() {
+            RACING_STATS.succeeded_races.fetch_add(1, Ordering::Relaxed);
+        } else {
+            RACING_STATS.failed_races.fetch_add(1, Ordering::Relaxed);
+        }
+
+        let total_req = RACING_STATS.total_requests.load(Ordering::Relaxed);
+        let ok_req = RACING_STATS.succeeded_requests.load(Ordering::Relaxed);
+        let _fail_req = RACING_STATS.failed_requests.load(Ordering::Relaxed);
+        let total_race = RACING_STATS.total_races.load(Ordering::Relaxed);
+        let ok_race = RACING_STATS.succeeded_races.load(Ordering::Relaxed);
+        let _fail_race = RACING_STATS.failed_races.load(Ordering::Relaxed);
+
+        let req_pct = if total_req > 0 {
+            (ok_req as f64 / total_req as f64) * 100.0
+        } else {
+            0.0
+        };
+        let race_pct = if total_race > 0 {
+            (ok_race as f64 / total_race as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        eprintln!(
+            "API requests: {}/{} succeeded ({:.0}%) | Races: {}/{} succeeded ({:.0}%)",
+            ok_req, total_req, req_pct, ok_race, total_race, race_pct,
+        );
+
+        match first_text {
+            Some(text) => Ok(text),
+            None => {
+                Err(anyhow!("All {} parallel attempts failed: {}", parallel, last_err).into())
+            }
+        }
     }
 
     fn get_model_path(model: &ModelType) -> Result<std::path::PathBuf, Box<dyn Error>> {
