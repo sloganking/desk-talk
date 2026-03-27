@@ -170,6 +170,23 @@
                 </div>
             </div>
             
+            <div class="section racing-section" id="racingStatsSection" style="display: none;">
+                <h2>Parallel Racing <span class="info-icon" title="When parallel > 1, multiple API requests race simultaneously. The first response wins and others are discarded.">ⓘ</span></h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value"><span id="racingReqSuccess">0</span>/<span id="racingReqTotal">0</span></div>
+                        <div class="stat-label">API Requests Succeeded</div>
+                        <div class="stat-lifetime" id="racingReqPercent">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value"><span id="racingRaceSuccess">0</span>/<span id="racingRaceTotal">0</span></div>
+                        <div class="stat-label">Races Succeeded (Your Experience)</div>
+                        <div class="stat-lifetime" id="racingRacePercent">0%</div>
+                    </div>
+                </div>
+                <p class="hint" id="racingReliabilityHint"></p>
+            </div>
+
             <div class="section chart-section">
                 <h2>Last 30 Days</h2>
                 <div class="chart-container" id="dailyChart"></div>

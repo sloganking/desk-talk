@@ -450,4 +450,15 @@ pub mod trans {
             }
         }
     }
+
+    pub fn get_racing_stats() -> (usize, usize, usize, usize, usize, usize) {
+        (
+            RACING_STATS.total_requests.load(Ordering::Relaxed),
+            RACING_STATS.succeeded_requests.load(Ordering::Relaxed),
+            RACING_STATS.failed_requests.load(Ordering::Relaxed),
+            RACING_STATS.total_races.load(Ordering::Relaxed),
+            RACING_STATS.succeeded_races.load(Ordering::Relaxed),
+            RACING_STATS.failed_races.load(Ordering::Relaxed),
+        )
+    }
 }

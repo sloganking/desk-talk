@@ -393,6 +393,34 @@ async function loadStatistics() {
             dailyAverageEl.textContent = '';
         }
         
+        // Racing stats
+        const racingSection = document.getElementById('racingStatsSection');
+        if (racingSection && stats.parallel > 1 && stats.racing_total_races > 0) {
+            racingSection.style.display = '';
+            document.getElementById('racingReqSuccess').textContent = formatNumber(stats.racing_succeeded_requests);
+            document.getElementById('racingReqTotal').textContent = formatNumber(stats.racing_total_requests);
+            document.getElementById('racingRaceSuccess').textContent = formatNumber(stats.racing_succeeded_races);
+            document.getElementById('racingRaceTotal').textContent = formatNumber(stats.racing_total_races);
+
+            const reqPct = stats.racing_total_requests > 0
+                ? ((stats.racing_succeeded_requests / stats.racing_total_requests) * 100).toFixed(0)
+                : 0;
+            const racePct = stats.racing_total_races > 0
+                ? ((stats.racing_succeeded_races / stats.racing_total_races) * 100).toFixed(0)
+                : 0;
+            document.getElementById('racingReqPercent').textContent = `${reqPct}% success rate`;
+            document.getElementById('racingRacePercent').textContent = `${racePct}% success rate`;
+
+            const hint = document.getElementById('racingReliabilityHint');
+            if (hint && reqPct !== racePct) {
+                hint.textContent = `Individual API requests succeed ${reqPct}% of the time. By racing ${stats.parallel} in parallel, your perceived reliability is ${racePct}%.`;
+            } else if (hint) {
+                hint.textContent = `Racing ${stats.parallel} parallel requests per transcription.`;
+            }
+        } else if (racingSection) {
+            racingSection.style.display = 'none';
+        }
+
         // Render daily chart
         renderDailyChart(stats.daily_chart || []);
         

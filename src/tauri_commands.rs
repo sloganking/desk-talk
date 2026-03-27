@@ -37,6 +37,14 @@ pub struct CombinedStatistics {
     pub daily_chart: Vec<DailyDataPoint>,
     // User's typing speed for reference
     pub typing_wpm: u32,
+    // Parallel racing stats (session only)
+    pub racing_total_requests: usize,
+    pub racing_succeeded_requests: usize,
+    pub racing_failed_requests: usize,
+    pub racing_total_races: usize,
+    pub racing_succeeded_races: usize,
+    pub racing_failed_races: usize,
+    pub parallel: usize,
 }
 
 #[tauri::command]
@@ -155,6 +163,10 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         });
     }
     
+    let (r_total_req, r_ok_req, r_fail_req, r_total_race, r_ok_race, r_fail_race) =
+        crate::transcribe::trans::get_racing_stats();
+    let parallel = state.config.read().parallel;
+
     Ok(CombinedStatistics {
         // Session stats
         total_words: session.total_words,
@@ -176,6 +188,14 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         daily_chart,
         // Config
         typing_wpm,
+        // Racing stats
+        racing_total_requests: r_total_req,
+        racing_succeeded_requests: r_ok_req,
+        racing_failed_requests: r_fail_req,
+        racing_total_races: r_total_race,
+        racing_succeeded_races: r_ok_race,
+        racing_failed_races: r_fail_race,
+        parallel,
     })
 }
 
