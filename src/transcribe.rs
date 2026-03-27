@@ -31,6 +31,14 @@ pub mod trans {
         total_races: AtomicUsize,
         succeeded_races: AtomicUsize,
         failed_races: AtomicUsize,
+        /// Races that succeeded despite at least one lane failing
+        failures_avoided: AtomicUsize,
+        /// Sum of winning (fastest success) times in ms
+        winning_time_ms_sum: AtomicUsize,
+        /// Sum of all successful lane times in ms (for computing avg without racing)
+        all_success_time_ms_sum: AtomicUsize,
+        /// Count of successful lanes (denominator for all_success average)
+        all_success_count: AtomicUsize,
     }
 
     static RACING_STATS: RacingStats = RacingStats {
@@ -40,6 +48,10 @@ pub mod trans {
         total_races: AtomicUsize::new(0),
         succeeded_races: AtomicUsize::new(0),
         failed_races: AtomicUsize::new(0),
+        failures_avoided: AtomicUsize::new(0),
+        winning_time_ms_sum: AtomicUsize::new(0),
+        all_success_time_ms_sum: AtomicUsize::new(0),
+        all_success_count: AtomicUsize::new(0),
     };
 
     /// Moves audio to mp3.
@@ -188,7 +200,8 @@ pub mod trans {
             PathBuf::from(input)
         };
 
-        let (tx, rx) = std::sync::mpsc::channel();
+        // Channel sends (result, elapsed_ms) per lane
+        let (tx, rx) = std::sync::mpsc::channel::<(Result<String, String>, u128)>();
         let race_start = std::time::Instant::now();
         let first_success_time: std::sync::Arc<std::sync::Mutex<Option<std::time::Instant>>> =
             std::sync::Arc::new(std::sync::Mutex::new(None));
@@ -213,10 +226,11 @@ pub mod trans {
                     .await
                     {
                         Ok(Ok(text)) => {
+                            let elapsed = race_start.elapsed();
+                            let elapsed_ms = elapsed.as_millis();
                             RACING_STATS
                                 .succeeded_requests
                                 .fetch_add(1, Ordering::Relaxed);
-                            let elapsed = race_start.elapsed();
                             let mut first = first_success_time.lock().unwrap();
                             if first.is_none() {
                                 *first = Some(std::time::Instant::now());
@@ -235,13 +249,14 @@ pub mod trans {
                                 );
                             }
                             drop(first);
-                            Ok(text)
+                            (Ok(text), elapsed_ms)
                         }
                         Ok(Err(e)) => {
+                            let elapsed = race_start.elapsed();
+                            let elapsed_ms = elapsed.as_millis();
                             RACING_STATS
                                 .failed_requests
                                 .fetch_add(1, Ordering::Relaxed);
-                            let elapsed = race_start.elapsed();
                             let extra = first_success_time
                                 .lock()
                                 .unwrap()
@@ -262,13 +277,14 @@ pub mod trans {
                                     e
                                 );
                             }
-                            Err(format!("{}", e))
+                            (Err(format!("{}", e)), elapsed_ms)
                         }
                         Err(_) => {
+                            let elapsed = race_start.elapsed();
+                            let elapsed_ms = elapsed.as_millis();
                             RACING_STATS
                                 .failed_requests
                                 .fetch_add(1, Ordering::Relaxed);
-                            let elapsed = race_start.elapsed();
                             let extra = first_success_time
                                 .lock()
                                 .unwrap()
@@ -287,7 +303,7 @@ pub mod trans {
                                     elapsed.as_secs_f64()
                                 );
                             }
-                            Err("Timeout".to_string())
+                            (Err("Timeout".to_string()), elapsed_ms)
                         }
                     }
                 });
@@ -299,31 +315,57 @@ pub mod trans {
 
         let mut first_text: Option<String> = None;
         let mut last_err = String::from("Unknown error");
-        while let Ok(result) = rx.recv() {
+        let mut success_times_ms: Vec<u128> = Vec::new();
+        let mut had_failure = false;
+
+        while let Ok((result, elapsed_ms)) = rx.recv() {
             match result {
                 Ok(text) => {
+                    success_times_ms.push(elapsed_ms);
                     if first_text.is_none() {
                         first_text = Some(text);
                     }
                 }
-                Err(e) => last_err = e,
+                Err(e) => {
+                    had_failure = true;
+                    last_err = e;
+                }
             }
         }
 
         RACING_STATS.total_races.fetch_add(1, Ordering::Relaxed);
 
-        if first_text.is_some() {
+        let race_succeeded = first_text.is_some();
+        if race_succeeded {
             RACING_STATS.succeeded_races.fetch_add(1, Ordering::Relaxed);
+
+            if had_failure {
+                RACING_STATS
+                    .failures_avoided
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+
+            if let Some(&fastest) = success_times_ms.iter().min() {
+                RACING_STATS
+                    .winning_time_ms_sum
+                    .fetch_add(fastest as usize, Ordering::Relaxed);
+            }
+            let total_success_ms: u128 = success_times_ms.iter().sum();
+            RACING_STATS
+                .all_success_time_ms_sum
+                .fetch_add(total_success_ms as usize, Ordering::Relaxed);
+            RACING_STATS
+                .all_success_count
+                .fetch_add(success_times_ms.len(), Ordering::Relaxed);
         } else {
             RACING_STATS.failed_races.fetch_add(1, Ordering::Relaxed);
         }
 
         let total_req = RACING_STATS.total_requests.load(Ordering::Relaxed);
         let ok_req = RACING_STATS.succeeded_requests.load(Ordering::Relaxed);
-        let _fail_req = RACING_STATS.failed_requests.load(Ordering::Relaxed);
         let total_race = RACING_STATS.total_races.load(Ordering::Relaxed);
         let ok_race = RACING_STATS.succeeded_races.load(Ordering::Relaxed);
-        let _fail_race = RACING_STATS.failed_races.load(Ordering::Relaxed);
+        let avoided = RACING_STATS.failures_avoided.load(Ordering::Relaxed);
 
         let req_pct = if total_req > 0 {
             (ok_req as f64 / total_req as f64) * 100.0
@@ -337,8 +379,8 @@ pub mod trans {
         };
 
         eprintln!(
-            "API requests: {}/{} succeeded ({:.0}%) | Races: {}/{} succeeded ({:.0}%)",
-            ok_req, total_req, req_pct, ok_race, total_race, race_pct,
+            "API requests: {}/{} succeeded ({:.0}%) | Races: {}/{} succeeded ({:.0}%) | Failures avoided: {}",
+            ok_req, total_req, req_pct, ok_race, total_race, race_pct, avoided,
         );
 
         match first_text {
@@ -451,14 +493,53 @@ pub mod trans {
         }
     }
 
-    pub fn get_racing_stats() -> (usize, usize, usize, usize, usize, usize) {
-        (
-            RACING_STATS.total_requests.load(Ordering::Relaxed),
-            RACING_STATS.succeeded_requests.load(Ordering::Relaxed),
-            RACING_STATS.failed_requests.load(Ordering::Relaxed),
-            RACING_STATS.total_races.load(Ordering::Relaxed),
-            RACING_STATS.succeeded_races.load(Ordering::Relaxed),
-            RACING_STATS.failed_races.load(Ordering::Relaxed),
-        )
+    pub struct RacingStatsSnapshot {
+        pub total_requests: usize,
+        pub succeeded_requests: usize,
+        pub failed_requests: usize,
+        pub total_races: usize,
+        pub succeeded_races: usize,
+        pub failed_races: usize,
+        pub failures_avoided: usize,
+        /// Average time of the winning (fastest) lane in ms
+        pub avg_winning_time_ms: f64,
+        /// Average time across all successful lanes in ms
+        pub avg_all_success_time_ms: f64,
+    }
+
+    pub fn get_racing_stats() -> RacingStatsSnapshot {
+        let total_requests = RACING_STATS.total_requests.load(Ordering::Relaxed);
+        let succeeded_requests = RACING_STATS.succeeded_requests.load(Ordering::Relaxed);
+        let failed_requests = RACING_STATS.failed_requests.load(Ordering::Relaxed);
+        let total_races = RACING_STATS.total_races.load(Ordering::Relaxed);
+        let succeeded_races = RACING_STATS.succeeded_races.load(Ordering::Relaxed);
+        let failed_races = RACING_STATS.failed_races.load(Ordering::Relaxed);
+        let failures_avoided = RACING_STATS.failures_avoided.load(Ordering::Relaxed);
+        let winning_sum = RACING_STATS.winning_time_ms_sum.load(Ordering::Relaxed);
+        let all_sum = RACING_STATS.all_success_time_ms_sum.load(Ordering::Relaxed);
+        let all_count = RACING_STATS.all_success_count.load(Ordering::Relaxed);
+
+        let avg_winning_time_ms = if succeeded_races > 0 {
+            winning_sum as f64 / succeeded_races as f64
+        } else {
+            0.0
+        };
+        let avg_all_success_time_ms = if all_count > 0 {
+            all_sum as f64 / all_count as f64
+        } else {
+            0.0
+        };
+
+        RacingStatsSnapshot {
+            total_requests,
+            succeeded_requests,
+            failed_requests,
+            total_races,
+            succeeded_races,
+            failed_races,
+            failures_avoided,
+            avg_winning_time_ms,
+            avg_all_success_time_ms,
+        }
     }
 }

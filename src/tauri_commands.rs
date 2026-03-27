@@ -44,6 +44,9 @@ pub struct CombinedStatistics {
     pub racing_total_races: usize,
     pub racing_succeeded_races: usize,
     pub racing_failed_races: usize,
+    pub racing_failures_avoided: usize,
+    pub racing_avg_winning_time_ms: f64,
+    pub racing_avg_all_success_time_ms: f64,
     pub parallel: usize,
 }
 
@@ -163,8 +166,7 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         });
     }
     
-    let (r_total_req, r_ok_req, r_fail_req, r_total_race, r_ok_race, r_fail_race) =
-        crate::transcribe::trans::get_racing_stats();
+    let rs = crate::transcribe::trans::get_racing_stats();
     let parallel = state.config.read().parallel;
 
     Ok(CombinedStatistics {
@@ -189,12 +191,15 @@ pub fn get_statistics(state: tauri::State<AppState>) -> Result<CombinedStatistic
         // Config
         typing_wpm,
         // Racing stats
-        racing_total_requests: r_total_req,
-        racing_succeeded_requests: r_ok_req,
-        racing_failed_requests: r_fail_req,
-        racing_total_races: r_total_race,
-        racing_succeeded_races: r_ok_race,
-        racing_failed_races: r_fail_race,
+        racing_total_requests: rs.total_requests,
+        racing_succeeded_requests: rs.succeeded_requests,
+        racing_failed_requests: rs.failed_requests,
+        racing_total_races: rs.total_races,
+        racing_succeeded_races: rs.succeeded_races,
+        racing_failed_races: rs.failed_races,
+        racing_failures_avoided: rs.failures_avoided,
+        racing_avg_winning_time_ms: rs.avg_winning_time_ms,
+        racing_avg_all_success_time_ms: rs.avg_all_success_time_ms,
         parallel,
     })
 }

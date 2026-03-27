@@ -411,6 +411,41 @@ async function loadStatistics() {
             document.getElementById('racingReqPercent').textContent = `${reqPct}% success rate`;
             document.getElementById('racingRacePercent').textContent = `${racePct}% success rate`;
 
+            // Failures avoided
+            document.getElementById('racingFailuresAvoided').textContent = formatNumber(stats.racing_failures_avoided);
+            const avoidedHint = document.getElementById('racingFailuresAvoidedHint');
+            if (avoidedHint) {
+                if (stats.racing_failures_avoided > 0) {
+                    avoidedHint.textContent = `${stats.racing_failures_avoided} time${stats.racing_failures_avoided !== 1 ? 's' : ''} racing saved you from a failed transcription`;
+                } else {
+                    avoidedHint.textContent = 'No failures encountered yet';
+                }
+            }
+
+            // Latency benefit
+            const latencyEl = document.getElementById('racingLatencyBenefit');
+            const latencyDetail = document.getElementById('racingLatencyDetail');
+            const avgWin = stats.racing_avg_winning_time_ms;
+            const avgAll = stats.racing_avg_all_success_time_ms;
+            if (avgWin > 0 && avgAll > 0 && avgAll > avgWin) {
+                const savedMs = avgAll - avgWin;
+                if (savedMs >= 1000) {
+                    latencyEl.textContent = `${(savedMs / 1000).toFixed(1)}s faster`;
+                } else {
+                    latencyEl.textContent = `${Math.round(savedMs)}ms faster`;
+                }
+                const winSec = (avgWin / 1000).toFixed(2);
+                const allSec = (avgAll / 1000).toFixed(2);
+                latencyDetail.textContent = `Avg response: ${winSec}s (vs ${allSec}s without racing)`;
+            } else if (avgWin > 0) {
+                const winSec = (avgWin / 1000).toFixed(2);
+                latencyEl.textContent = `${winSec}s avg`;
+                latencyDetail.textContent = 'All lanes responding at similar speed';
+            } else {
+                latencyEl.textContent = '—';
+                latencyDetail.textContent = '';
+            }
+
             const hint = document.getElementById('racingReliabilityHint');
             if (hint && reqPct !== racePct) {
                 hint.textContent = `Individual API requests succeed ${reqPct}% of the time. By racing ${stats.parallel} in parallel, your perceived reliability is ${racePct}%.`;
