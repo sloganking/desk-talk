@@ -193,6 +193,7 @@ impl TranscriptionEngine {
         let mut recording_start = std::time::SystemTime::now();
         let mut key_pressed = false;
         let mut last_transcription_failed = false;
+        let mut last_recording_duration_secs: f64 = 0.0;
         let key_to_check = opt.get_ptt_key().unwrap();
 
         println!(
@@ -244,14 +245,15 @@ impl TranscriptionEngine {
                         }
 
                         // Quick tap after a failure retries the last audio
-                        let (audio_path, is_retry) = if elapsed.as_secs_f32() > 0.2 {
-                            (Some(voice_tmp_path.clone()), false)
+                        let (audio_path, is_retry, recording_duration_secs) = if elapsed.as_secs_f32() > 0.2 {
+                            last_recording_duration_secs = elapsed.as_secs_f64();
+                            (Some(voice_tmp_path.clone()), false, elapsed.as_secs_f64())
                         } else if last_transcription_failed && voice_retry_path.exists() {
                             println!("Quick tap detected - retrying last failed transcription");
-                            (Some(voice_retry_path.clone()), true)
+                            (Some(voice_retry_path.clone()), true, last_recording_duration_secs)
                         } else {
                             println!("Recording too short");
-                            (None, false)
+                            (None, false, 0.0)
                         };
 
                         if let Some(audio_path) = audio_path {
@@ -270,6 +272,7 @@ impl TranscriptionEngine {
                                     &client,
                                     &audio_path,
                                     opt.parallel,
+                                    recording_duration_secs,
                                 ))
                             };
 

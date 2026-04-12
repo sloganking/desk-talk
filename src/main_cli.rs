@@ -358,6 +358,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             &client,
                                             &voice_tmp_path,
                                             opt.parallel,
+                                            elapsed.as_secs_f64(),
                                         ))
                                     };
 

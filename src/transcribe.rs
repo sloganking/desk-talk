@@ -54,6 +54,58 @@ pub mod trans {
         all_success_count: AtomicUsize::new(0),
     };
 
+    const BASE_TIMEOUT_SECS: f64 = 20.0;
+    const DEFAULT_RATIO: f64 = 1.0;
+    const SAFETY_MULTIPLIER: f64 = 1.5;
+    const ADAPTIVE_MAX_SAMPLES: usize = 50;
+
+    struct AdaptiveTimeout {
+        ratios: std::sync::Mutex<Vec<f64>>,
+    }
+
+    static ADAPTIVE_TIMEOUT: AdaptiveTimeout = AdaptiveTimeout {
+        ratios: std::sync::Mutex::new(Vec::new()),
+    };
+
+    impl AdaptiveTimeout {
+        fn record(&self, recording_duration_secs: f64, api_secs: f64) {
+            if recording_duration_secs <= 0.0 || api_secs <= 0.0 {
+                return;
+            }
+            let ratio = api_secs / recording_duration_secs;
+            let mut ratios = self.ratios.lock().unwrap();
+            if ratios.len() >= ADAPTIVE_MAX_SAMPLES {
+                ratios.remove(0);
+            }
+            ratios.push(ratio);
+            eprintln!(
+                "Adaptive timeout: recorded ratio {:.2} ({:.1}s API / {:.1}s audio), p90 now {:.2} ({} samples)",
+                ratio, api_secs, recording_duration_secs,
+                Self::p90_ratio_inner(&ratios), ratios.len()
+            );
+        }
+
+        fn p90_ratio_inner(ratios: &[f64]) -> f64 {
+            if ratios.is_empty() {
+                return DEFAULT_RATIO;
+            }
+            let mut sorted: Vec<f64> = ratios.to_vec();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let idx = ((sorted.len() as f64) * 0.9).ceil() as usize;
+            let idx = idx.min(sorted.len() - 1);
+            sorted[idx]
+        }
+
+        fn compute_timeout(&self, recording_duration_secs: f64) -> Duration {
+            let ratios = self.ratios.lock().unwrap();
+            let ratio = Self::p90_ratio_inner(&ratios);
+            drop(ratios);
+            let proportional = recording_duration_secs * ratio * SAFETY_MULTIPLIER;
+            let timeout_secs = BASE_TIMEOUT_SECS.max(proportional);
+            Duration::from_secs_f64(timeout_secs)
+        }
+    }
+
     /// Moves audio to mp3.
     /// Ignores output's extension if it is passed one.
     /// Returns the new path.
@@ -138,13 +190,24 @@ pub mod trans {
         client: &Client<OpenAIConfig>,
         input: &Path,
         attempts: usize,
+        recording_duration_secs: f64,
     ) -> Result<String, Box<dyn Error>> {
         let mut last_err: Option<Box<dyn Error>> = None;
+        let timeout_dur = ADAPTIVE_TIMEOUT.compute_timeout(recording_duration_secs);
+        eprintln!(
+            "Transcription timeout: {:.1}s for {:.1}s of audio ({} attempts)",
+            timeout_dur.as_secs_f64(), recording_duration_secs, attempts
+        );
 
         for attempt in 0..attempts {
-            match future::timeout(Duration::from_secs(10), transcribe(client, input)).await {
+            let attempt_start = std::time::Instant::now();
+            match future::timeout(timeout_dur, transcribe(client, input)).await {
                 Ok(res) => match res {
-                    Ok(text) => return Ok(text),
+                    Ok(text) => {
+                        let api_secs = attempt_start.elapsed().as_secs_f64();
+                        ADAPTIVE_TIMEOUT.record(recording_duration_secs, api_secs);
+                        return Ok(text);
+                    }
                     Err(e) => {
                         eprintln!(
                             "Transcription attempt {}/{} failed: {:?}",
@@ -157,16 +220,15 @@ pub mod trans {
                 },
                 Err(e) => {
                     eprintln!(
-                        "Transcription attempt {}/{} timed out: {:?}",
+                        "Transcription attempt {}/{} timed out after {:.1}s: {:?}",
                         attempt + 1,
                         attempts,
+                        timeout_dur.as_secs_f64(),
                         e
                     );
                     last_err = Some(anyhow!("Timeout").into());
                 }
             }
-
-            // No delay between retries so we don't block the user
         }
 
         Err(last_err.unwrap_or_else(|| Box::<dyn Error>::from(anyhow!("Unknown error"))))
@@ -180,14 +242,19 @@ pub mod trans {
         client: &Client<OpenAIConfig>,
         input: &Path,
         parallel: usize,
+        recording_duration_secs: f64,
     ) -> Result<String, Box<dyn Error>> {
         let parallel = parallel.clamp(1, 5);
 
         if parallel <= 1 {
-            return transcribe_with_retry(client, input, 3).await;
+            return transcribe_with_retry(client, input, 3, recording_duration_secs).await;
         }
 
-        eprintln!("Racing {} parallel transcription requests", parallel);
+        let timeout_dur = ADAPTIVE_TIMEOUT.compute_timeout(recording_duration_secs);
+        eprintln!(
+            "Racing {} parallel transcription requests (timeout: {:.1}s for {:.1}s of audio)",
+            parallel, timeout_dur.as_secs_f64(), recording_duration_secs
+        );
 
         let mp3_input = if input.extension().unwrap_or_default() != "mp3" {
             let tmp_dir = tempdir().context("Failed to create temp dir.")?;
@@ -220,7 +287,7 @@ pub mod trans {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 let result = rt.block_on(async {
                     match tokio::time::timeout(
-                        Duration::from_secs(10),
+                        timeout_dur,
                         transcribe(&client, &input),
                     )
                     .await
@@ -228,6 +295,7 @@ pub mod trans {
                         Ok(Ok(text)) => {
                             let elapsed = race_start.elapsed();
                             let elapsed_ms = elapsed.as_millis();
+                            ADAPTIVE_TIMEOUT.record(recording_duration_secs, elapsed.as_secs_f64());
                             RACING_STATS
                                 .succeeded_requests
                                 .fetch_add(1, Ordering::Relaxed);
@@ -484,10 +552,10 @@ pub mod trans {
         client: &Client<OpenAIConfig>,
         text: &str,
     ) -> Result<String, Box<dyn Error>> {
-        match future::timeout(Duration::from_secs(10), fix_punctuation_inner(client, text)).await {
+        match future::timeout(Duration::from_secs(20), fix_punctuation_inner(client, text)).await {
             Ok(result) => result,
             Err(_) => {
-                eprintln!("Punctuation fix timed out after 10 seconds");
+                eprintln!("Punctuation fix timed out after 20 seconds");
                 Err(anyhow!("Punctuation fix timed out").into())
             }
         }
