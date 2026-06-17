@@ -4,6 +4,7 @@
 mod app_state;
 mod config;
 mod easy_rdev_key;
+mod realtime;
 mod record;
 mod tauri_commands;
 mod transcribe;
@@ -260,7 +261,18 @@ fn main() {
         }
     }
 
+    // Parse --realtime / --no-realtime flags (override saved config). When
+    // neither is passed, the saved setting is kept.
+    if args.iter().any(|a| a == "--realtime") {
+        config.realtime = true;
+        println!("Realtime streaming enabled via CLI");
+    } else if args.iter().any(|a| a == "--no-realtime") {
+        config.realtime = false;
+        println!("Realtime streaming disabled via CLI");
+    }
+
     println!("Parallel transcription: {}", config.parallel);
+    println!("Realtime streaming: {}", config.realtime);
 
     let app_state = AppState::new(config);
 

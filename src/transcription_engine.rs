@@ -196,6 +196,20 @@ impl TranscriptionEngine {
         let mut last_recording_duration_secs: f64 = 0.0;
         let key_to_check = opt.get_ptt_key().unwrap();
 
+        // Realtime streaming mode: when enabled (and not using a local model)
+        // we stream audio to OpenAI and type transcript deltas live, instead of
+        // recording a WAV file and transcribing it at the end.
+        let realtime_enabled = opt.realtime && !opt.use_local;
+        let mut realtime_session: Option<crate::realtime::RealtimeSession> = None;
+
+        if realtime_enabled {
+            println!("Realtime streaming transcription enabled (model: gpt-4o-transcribe)");
+            println!(
+                "Realtime debug log: {}",
+                crate::realtime::log_path().display()
+            );
+        }
+
         println!(
             "Key handler thread started, waiting for PTT key: {:?}",
             key_to_check
@@ -209,10 +223,44 @@ impl TranscriptionEngine {
             match event.event_type {
                 rdev::EventType::KeyPress(key) => {
                     if key == key_to_check && !key_pressed {
-                        println!("PTT key pressed - starting recording");
                         key_pressed = true;
                         play_ptt_press_sound(); // Play low beep
                         recording_start = std::time::SystemTime::now();
+
+                        if realtime_enabled {
+                            println!("PTT key pressed - starting realtime stream");
+                            let api_key = opt
+                                .api_key
+                                .clone()
+                                .or_else(|| std::env::var("OPENAI_API_KEY").ok());
+                            match api_key {
+                                Some(api_key) => {
+                                    match crate::realtime::RealtimeSession::start(
+                                        api_key,
+                                        opt.device.clone(),
+                                        "gpt-4o-transcribe".to_string(),
+                                        None,
+                                        opt.cap_first,
+                                    ) {
+                                        Ok(session) => realtime_session = Some(session),
+                                        Err(err) => {
+                                            eprintln!(
+                                                "Error: Failed to start realtime session: {:?}",
+                                                err
+                                            );
+                                            play_failure_sound();
+                                        }
+                                    }
+                                }
+                                None => {
+                                    eprintln!("Error: No OpenAI API key for realtime mode");
+                                    play_failure_sound();
+                                }
+                            }
+                            continue;
+                        }
+
+                        println!("PTT key pressed - starting recording");
                         match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
                             Ok(_) => println!("Recording started successfully"),
                             Err(err) => {
@@ -224,9 +272,64 @@ impl TranscriptionEngine {
                 }
                 rdev::EventType::KeyRelease(key) => {
                     if key == key_to_check && key_pressed {
-                        println!("PTT key released - stopping recording");
                         key_pressed = false;
                         play_ptt_release_sound(); // Play high beep
+
+                        if realtime_enabled {
+                            println!("PTT key released - finishing realtime stream");
+                            let elapsed = recording_start.elapsed().unwrap_or_default();
+                            let session = match realtime_session.take() {
+                                Some(s) => s,
+                                None => continue,
+                            };
+                            let transcription = match session.stop() {
+                                Ok(text) => text,
+                                Err(err) => {
+                                    eprintln!("Error: Realtime transcription failed: {:?}", err);
+                                    play_failure_sound();
+                                    continue;
+                                }
+                            };
+
+                            let trimmed = transcription.trim();
+                            if trimmed.is_empty() {
+                                println!("No transcription");
+                                play_failure_sound();
+                                continue;
+                            }
+
+                            // Text was already typed live during the stream. If a
+                            // trailing space was requested, type just that now.
+                            if opt.space {
+                                enigo.key_sequence(" ");
+                            }
+
+                            let word_count = trimmed.split_whitespace().count();
+                            let duration_secs = elapsed.as_secs_f64();
+                            if duration_secs > 0.0 {
+                                let wpm = (word_count as f64) * 60.0 / duration_secs;
+                                wpm_history.push_back(wpm);
+                                wpm_sum += wpm;
+                                if wpm_history.len() > WPM_ROLLING_MAX {
+                                    if let Some(removed) = wpm_history.pop_front() {
+                                        wpm_sum -= removed;
+                                    }
+                                }
+                                let avg_wpm = if !wpm_history.is_empty() {
+                                    wpm_sum / (wpm_history.len() as f64)
+                                } else {
+                                    0.0
+                                };
+                                app_state.update_statistics(word_count, duration_secs, wpm);
+                                println!(
+                                    "WPM: {:.1} | Avg: {:.1} | Total: {} words (realtime)",
+                                    wpm, avg_wpm, word_count
+                                );
+                            }
+                            continue;
+                        }
+
+                        println!("PTT key released - stopping recording");
 
                         let elapsed = match recording_start.elapsed() {
                             Ok(elapsed) => elapsed,

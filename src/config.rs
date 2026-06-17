@@ -37,6 +37,11 @@ pub struct AppConfig {
     /// Number of parallel transcription requests to race (1 = no parallelism)
     #[serde(default = "default_parallel")]
     pub parallel: usize,
+    /// Use the OpenAI Realtime API to stream transcription and type it live as
+    /// you speak, instead of recording a WAV file and transcribing it at the
+    /// end. Only applies when not using a local model.
+    #[serde(default)]
+    pub realtime: bool,
 }
 
 fn default_typing_wpm() -> u32 {
@@ -66,6 +71,7 @@ impl Default for AppConfig {
             api_key: None,
             typing_wpm: default_typing_wpm(),
             parallel: default_parallel(),
+            realtime: false,
         }
     }
 }
