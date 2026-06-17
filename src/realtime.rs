@@ -425,7 +425,9 @@ async fn run_session(
             msg = read.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        process_event(&text, &mut enigo, &mut accumulated, &mut typed_first, &mut pending_space, &mut handle_delta)?;
+                        // Ignore turn-completion during phase 1 (VAD models emit
+                        // a completion per segment while you keep talking).
+                        let _ = process_event(&text, &mut enigo, &mut accumulated, &mut typed_first, &mut pending_space, &mut handle_delta)?;
                     }
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(_)) => {}
@@ -457,10 +459,12 @@ async fn run_session(
     drop(_stream);
 
     // --- Phase 2: drain remaining transcript deltas ----------------------
+    // Stop as soon as the server reports the committed turn is complete; the
+    // idle timeout is only a safety net for the unlikely case it never does.
     loop {
         match tokio::time::timeout(DRAIN_IDLE_TIMEOUT, read.next()).await {
             Ok(Some(Ok(Message::Text(text)))) => {
-                process_event(
+                let completed = process_event(
                     &text,
                     &mut enigo,
                     &mut accumulated,
@@ -468,6 +472,9 @@ async fn run_session(
                     &mut pending_space,
                     &mut handle_delta,
                 )?;
+                if completed {
+                    break;
+                }
             }
             Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
             Ok(Some(Ok(_))) => {}
@@ -482,6 +489,9 @@ async fn run_session(
     Ok(accumulated)
 }
 
+/// Processes one server event. Returns `Ok(true)` when the event signals that
+/// the committed turn has finished transcribing (a `...completed` event), so
+/// the caller can stop draining immediately instead of waiting out a timeout.
 #[allow(clippy::too_many_arguments)]
 fn process_event(
     text: &str,
@@ -490,10 +500,10 @@ fn process_event(
     typed_first: &mut bool,
     pending_space: &mut bool,
     handle_delta: &mut impl FnMut(&str, &mut Enigo, &mut String, &mut bool),
-) -> Result<()> {
+) -> Result<bool> {
     let event: Value = match serde_json::from_str(text) {
         Ok(v) => v,
-        Err(_) => return Ok(()),
+        Err(_) => return Ok(false),
     };
     let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -513,9 +523,11 @@ fn process_event(
                     handle_delta(&delta, enigo, accumulated, typed_first);
                 }
             }
+            return Ok(false);
         }
         // Full transcript for a committed segment (already typed via deltas).
-        // Mark that the next segment should start with a space.
+        // Mark that the next segment should start with a space, and signal the
+        // turn is complete so the caller can stop waiting immediately.
         "conversation.item.input_audio_transcription.completed" => {
             if let Some(t) = extract_text(&event, "transcript") {
                 log_line(&format!("Segment completed: {t:?}"));
@@ -523,6 +535,7 @@ fn process_event(
             if *typed_first {
                 *pending_space = true;
             }
+            return Ok(true);
         }
         // Transcription failed for a segment.
         "conversation.item.input_audio_transcription.failed" => {
@@ -548,7 +561,7 @@ fn process_event(
             log_line(&format!("Server event: {other}"));
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 fn capitalize_first_letter(s: &mut String) {
