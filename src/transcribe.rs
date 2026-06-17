@@ -181,6 +181,10 @@ pub mod trans {
             .audio()
             .transcribe(request)
             .await
+            .map_err(|e| {
+                eprintln!("OpenAI transcription API error: {:?}", e);
+                e
+            })
             .context("Failed to get OpenAI API transcription response.")?;
 
         Ok(response.text)
