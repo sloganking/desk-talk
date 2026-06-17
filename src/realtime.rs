@@ -320,10 +320,32 @@ async fn run_session(
     let (mut write, mut read) = ws_stream.split();
 
     // --- Configure the transcription session (GA schema) -----------------
+    // gpt-realtime-whisper is a natively-streaming model: it emits partial
+    // transcript text *while* you speak, so we disable server VAD and commit
+    // manually on key release. Other models (e.g. gpt-4o-transcribe) only
+    // produce text per committed turn, so we use server VAD for them.
+    let is_streaming_whisper = model.contains("whisper");
+
     let mut transcription = json!({ "model": model });
     if let Some(lang) = language {
         transcription["language"] = Value::String(lang);
     }
+    if is_streaming_whisper {
+        // Latency/accuracy tradeoff: minimal | low | medium | high | xhigh.
+        transcription["delay"] = Value::String("low".to_string());
+    }
+
+    let turn_detection = if is_streaming_whisper {
+        Value::Null
+    } else {
+        json!({
+            "type": "server_vad",
+            "threshold": 0.5,
+            "prefix_padding_ms": 300,
+            "silence_duration_ms": 500
+        })
+    };
+
     let session_update = json!({
         "type": "session.update",
         "session": {
@@ -332,12 +354,7 @@ async fn run_session(
                 "input": {
                     "format": { "type": "audio/pcm", "rate": TARGET_SAMPLE_RATE },
                     "transcription": transcription,
-                    "turn_detection": {
-                        "type": "server_vad",
-                        "threshold": 0.5,
-                        "prefix_padding_ms": 300,
-                        "silence_duration_ms": 500
-                    }
+                    "turn_detection": turn_detection
                 }
             }
         }
@@ -359,6 +376,9 @@ async fn run_session(
     let mut enigo = Enigo::new();
     let mut accumulated = String::new();
     let mut typed_first = false;
+    // When a speech segment completes, the next segment's text won't include a
+    // leading space, so we insert one ourselves before the next delta.
+    let mut pending_space = false;
     let mut batch: Vec<i16> = Vec::with_capacity(APPEND_BATCH_SAMPLES * 2);
 
     // Types a delta into the focused window and records it.
@@ -405,7 +425,7 @@ async fn run_session(
             msg = read.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        process_event(&text, &mut enigo, &mut accumulated, &mut typed_first, &mut handle_delta)?;
+                        process_event(&text, &mut enigo, &mut accumulated, &mut typed_first, &mut pending_space, &mut handle_delta)?;
                     }
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(_)) => {}
@@ -445,6 +465,7 @@ async fn run_session(
                     &mut enigo,
                     &mut accumulated,
                     &mut typed_first,
+                    &mut pending_space,
                     &mut handle_delta,
                 )?;
             }
@@ -461,11 +482,13 @@ async fn run_session(
     Ok(accumulated)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_event(
     text: &str,
     enigo: &mut Enigo,
     accumulated: &mut String,
     typed_first: &mut bool,
+    pending_space: &mut bool,
     handle_delta: &mut impl FnMut(&str, &mut Enigo, &mut String, &mut bool),
 ) -> Result<()> {
     let event: Value = match serde_json::from_str(text) {
@@ -475,16 +498,30 @@ fn process_event(
     let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
     match event_type {
-        // Incremental transcript text (gpt-4o-transcribe / gpt-4o-mini-transcribe).
+        // Incremental transcript text.
         "conversation.item.input_audio_transcription.delta" => {
             if let Some(delta) = extract_text(&event, "delta") {
-                handle_delta(&delta, enigo, accumulated, typed_first);
+                // Insert a space at a segment boundary if neither side has one.
+                let needs_space = *pending_space
+                    && !accumulated.is_empty()
+                    && !accumulated.ends_with(char::is_whitespace)
+                    && !delta.starts_with(char::is_whitespace);
+                *pending_space = false;
+                if needs_space {
+                    handle_delta(&format!(" {delta}"), enigo, accumulated, typed_first);
+                } else {
+                    handle_delta(&delta, enigo, accumulated, typed_first);
+                }
             }
         }
-        // Full transcript for a committed segment (logged; already typed via deltas).
+        // Full transcript for a committed segment (already typed via deltas).
+        // Mark that the next segment should start with a space.
         "conversation.item.input_audio_transcription.completed" => {
             if let Some(t) = extract_text(&event, "transcript") {
                 log_line(&format!("Segment completed: {t:?}"));
+            }
+            if *typed_first {
+                *pending_space = true;
             }
         }
         // Transcription failed for a segment.

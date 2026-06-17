@@ -203,7 +203,7 @@ impl TranscriptionEngine {
         let mut realtime_session: Option<crate::realtime::RealtimeSession> = None;
 
         if realtime_enabled {
-            println!("Realtime streaming transcription enabled (model: gpt-4o-transcribe)");
+            println!("Realtime streaming transcription enabled (model: gpt-realtime-whisper)");
             println!(
                 "Realtime debug log: {}",
                 crate::realtime::log_path().display()
@@ -238,7 +238,7 @@ impl TranscriptionEngine {
                                     match crate::realtime::RealtimeSession::start(
                                         api_key,
                                         opt.device.clone(),
-                                        "gpt-4o-transcribe".to_string(),
+                                        "gpt-realtime-whisper".to_string(),
                                         None,
                                         opt.cap_first,
                                     ) {
