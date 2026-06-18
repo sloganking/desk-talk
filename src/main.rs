@@ -271,8 +271,25 @@ fn main() {
         println!("Realtime streaming disabled via CLI");
     }
 
+    // Parse --realtime-delay <minimal|low|medium|high|xhigh> (overrides config).
+    if let Some(pos) = args.iter().position(|a| a == "--realtime-delay") {
+        if let Some(val) = args.get(pos + 1) {
+            let sanitized = config::sanitize_realtime_delay(val);
+            if sanitized.eq_ignore_ascii_case(val) {
+                config.realtime_delay = sanitized;
+                println!("Realtime delay set to {} via CLI", config.realtime_delay);
+            } else {
+                println!(
+                    "Invalid --realtime-delay '{}'. Valid: minimal, low, medium, high, xhigh. Using {}.",
+                    val, config.realtime_delay
+                );
+            }
+        }
+    }
+
     println!("Parallel transcription: {}", config.parallel);
     println!("Realtime streaming: {}", config.realtime);
+    println!("Realtime delay: {}", config.realtime_delay);
 
     let app_state = AppState::new(config);
 

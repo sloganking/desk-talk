@@ -77,12 +77,14 @@ impl RealtimeSession {
     /// Starts capturing the microphone and streaming it to OpenAI. Returns
     /// quickly; all work happens on a background thread. Transcript deltas are
     /// typed into the focused window as they arrive.
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         api_key: String,
         device: String,
         model: String,
         language: Option<String>,
         cap_first: bool,
+        delay: String,
     ) -> Result<Self> {
         let (stop_tx, stop_rx) = flume::bounded::<()>(1);
         let (result_tx, result_rx) = flume::bounded::<Result<String>>(1);
@@ -102,7 +104,7 @@ impl RealtimeSession {
                 };
 
                 let result = rt.block_on(run_session(
-                    api_key, device, model, language, cap_first, stop_rx,
+                    api_key, device, model, language, cap_first, delay, stop_rx,
                 ));
                 let _ = result_tx.send(result);
             })
@@ -281,12 +283,14 @@ fn extract_text(event: &Value, field: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_session(
     api_key: String,
     device: String,
     model: String,
     language: Option<String>,
     cap_first: bool,
+    delay: String,
     stop_rx: flume::Receiver<()>,
 ) -> Result<String> {
     // --- Connect ---------------------------------------------------------
@@ -332,7 +336,10 @@ async fn run_session(
     }
     if is_streaming_whisper {
         // Latency/accuracy tradeoff: minimal | low | medium | high | xhigh.
-        transcription["delay"] = Value::String("low".to_string());
+        // Higher = more audio context before emitting text = better accuracy.
+        let delay = crate::config::sanitize_realtime_delay(&delay);
+        log_line(&format!("Realtime delay: {delay}"));
+        transcription["delay"] = Value::String(delay);
     }
 
     let turn_detection = if is_streaming_whisper {

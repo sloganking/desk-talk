@@ -203,7 +203,10 @@ impl TranscriptionEngine {
         let mut realtime_session: Option<crate::realtime::RealtimeSession> = None;
 
         if realtime_enabled {
-            println!("Realtime streaming transcription enabled (model: gpt-realtime-whisper)");
+            println!(
+                "Realtime streaming transcription enabled (model: gpt-realtime-whisper, delay: {})",
+                opt.realtime_delay
+            );
             println!(
                 "Realtime debug log: {}",
                 crate::realtime::log_path().display()
@@ -241,6 +244,7 @@ impl TranscriptionEngine {
                                         "gpt-realtime-whisper".to_string(),
                                         None,
                                         opt.cap_first,
+                                        opt.realtime_delay.clone(),
                                     ) {
                                         Ok(session) => realtime_session = Some(session),
                                         Err(err) => {

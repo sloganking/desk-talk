@@ -42,6 +42,23 @@ pub struct AppConfig {
     /// end. Only applies when not using a local model.
     #[serde(default)]
     pub realtime: bool,
+    /// Latency/accuracy tradeoff for the realtime (gpt-realtime-whisper) model.
+    /// One of: minimal, low, medium, high, xhigh. Higher = more audio context
+    /// before emitting text = better accuracy but more delay.
+    #[serde(default = "default_realtime_delay")]
+    pub realtime_delay: String,
+}
+
+fn default_realtime_delay() -> String {
+    "high".to_string()
+}
+
+/// Returns the delay if it's a valid level, otherwise the default ("high").
+pub fn sanitize_realtime_delay(value: &str) -> String {
+    match value.to_lowercase().as_str() {
+        v @ ("minimal" | "low" | "medium" | "high" | "xhigh") => v.to_string(),
+        _ => default_realtime_delay(),
+    }
 }
 
 fn default_typing_wpm() -> u32 {
@@ -72,6 +89,7 @@ impl Default for AppConfig {
             typing_wpm: default_typing_wpm(),
             parallel: default_parallel(),
             realtime: false,
+            realtime_delay: default_realtime_delay(),
         }
     }
 }
