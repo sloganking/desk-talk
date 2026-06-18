@@ -298,8 +298,22 @@ impl TranscriptionEngine {
                                 continue;
                             }
 
-                            // Text was already typed live during the stream. If a
-                            // trailing space was requested, type just that now.
+                            // Text was already typed live during the stream, so
+                            // any final post-processing is appended now.
+                            // --period: add a period if the text doesn't already
+                            // end with sentence-ending punctuation.
+                            if opt.period {
+                                let ends_with_punct = trimmed
+                                    .chars()
+                                    .last()
+                                    .map(|c| matches!(c, '.' | '!' | '?'))
+                                    .unwrap_or(false);
+                                if !ends_with_punct {
+                                    enigo.key_sequence(".");
+                                }
+                            }
+
+                            // --space: type a trailing space (after the period).
                             if opt.space {
                                 enigo.key_sequence(" ");
                             }
