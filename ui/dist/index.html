@@ -67,7 +67,12 @@
                 <label class="checkbox">
                     <input type="checkbox" id="realtime">
                     <span>Realtime streaming transcription</span>
-                    <span class="info-icon" title="Streams audio to OpenAI and types the text live as you speak (lower latency, visual feedback) instead of transcribing the whole recording at the end. Requires OpenAI API (not local). Uses the gpt-4o-transcribe model." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                    <span class="info-icon" title="Streams audio to OpenAI and types the text live as you speak (lower latency, visual feedback) instead of transcribing the whole recording at the end. Requires OpenAI API (not local). Uses the gpt-realtime-whisper model." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="smartPunctuation">
+                    <span>Smart end punctuation</span>
+                    <span class="info-icon" title="After you finish speaking, a cheap AI model picks the correct ending punctuation (. ? !, language-aware) and fixes it — e.g. turns a wrong period into a question mark. Adds a small delay after you release the key. Supersedes 'Always end with period'. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="autoStart">

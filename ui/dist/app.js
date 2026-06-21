@@ -133,6 +133,7 @@ async function loadConfig() {
         document.getElementById('period').checked = config.period || false;
         document.getElementById('typeChars').checked = config.type_chars || false;
         document.getElementById('realtime').checked = config.realtime || false;
+        document.getElementById('smartPunctuation').checked = config.smart_punctuation || false;
         document.getElementById('autoStart').checked = config.auto_start || false;
         document.getElementById('startMinimized').checked = config.start_minimized || false;
         document.getElementById('darkMode').checked = config.dark_mode || false;
@@ -510,6 +511,7 @@ async function saveConfig() {
                 period: document.getElementById('period').checked,
                 type_chars: document.getElementById('typeChars').checked,
                 realtime: document.getElementById('realtime').checked,
+                smart_punctuation: document.getElementById('smartPunctuation').checked,
                 auto_start: document.getElementById('autoStart').checked,
                 start_minimized: document.getElementById('startMinimized').checked,
                 dark_mode: document.getElementById('darkMode').checked,
@@ -557,6 +559,7 @@ async function saveConfig() {
             period: document.getElementById('period').checked,
             type_chars: document.getElementById('typeChars').checked,
             realtime: document.getElementById('realtime').checked,
+            smart_punctuation: document.getElementById('smartPunctuation').checked,
             auto_start: document.getElementById('autoStart').checked,
             start_minimized: document.getElementById('startMinimized').checked,
             dark_mode: document.getElementById('darkMode').checked,

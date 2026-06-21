@@ -47,6 +47,10 @@ pub struct AppConfig {
     /// before emitting text = better accuracy but more delay.
     #[serde(default = "default_realtime_delay")]
     pub realtime_delay: String,
+    /// After you finish speaking, use a cheap LLM to choose the correct ending
+    /// punctuation (. ? !, language-aware) instead of the dumb --period rule.
+    #[serde(default)]
+    pub smart_punctuation: bool,
 }
 
 fn default_realtime_delay() -> String {
@@ -90,6 +94,7 @@ impl Default for AppConfig {
             parallel: default_parallel(),
             realtime: false,
             realtime_delay: default_realtime_delay(),
+            smart_punctuation: false,
         }
     }
 }

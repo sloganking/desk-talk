@@ -5,7 +5,7 @@ use crate::transcribe::trans;
 use async_openai::Client;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use default_device_sink::DefaultDeviceSink;
-use enigo::{Enigo, KeyboardControllable};
+use enigo::{Enigo, Key, KeyboardControllable};
 use parking_lot::Mutex;
 use rdev::Event;
 use rodio::{source::SineWave, Decoder, Source};
@@ -303,10 +303,48 @@ impl TranscriptionEngine {
                             }
 
                             // Text was already typed live during the stream, so
-                            // any final post-processing is appended now.
+                            // any final punctuation post-processing is applied now.
+                            // Smart punctuation (LLM-decided) supersedes --period.
+                            let mut smart_applied = false;
+                            if opt.smart_punctuation {
+                                match runtime
+                                    .block_on(trans::decide_end_punctuation(&client, trimmed))
+                                {
+                                    Ok(mark) => {
+                                        // Whatever terminal punctuation is already
+                                        // typed at the end (often none, sometimes
+                                        // a wrong "." or model-added mark).
+                                        let existing: String = trimmed
+                                            .chars()
+                                            .rev()
+                                            .take_while(|c| trans::is_terminal_punct(*c))
+                                            .collect::<Vec<_>>()
+                                            .into_iter()
+                                            .rev()
+                                            .collect();
+                                        if mark != existing {
+                                            for _ in 0..existing.chars().count() {
+                                                enigo.key_click(Key::Backspace);
+                                            }
+                                            if !mark.is_empty() {
+                                                enigo.key_sequence(&mark);
+                                            }
+                                        }
+                                        smart_applied = true;
+                                    }
+                                    Err(err) => {
+                                        eprintln!(
+                                            "Smart punctuation failed: {:?}; falling back to --period",
+                                            err
+                                        );
+                                    }
+                                }
+                            }
+
                             // --period: add a period if the text doesn't already
-                            // end with sentence-ending punctuation.
-                            if opt.period {
+                            // end with sentence-ending punctuation (skipped when
+                            // smart punctuation already handled the ending).
+                            if !smart_applied && opt.period {
                                 let ends_with_punct = trimmed
                                     .chars()
                                     .last()
@@ -317,7 +355,7 @@ impl TranscriptionEngine {
                                 }
                             }
 
-                            // --space: type a trailing space (after the period).
+                            // --space: type a trailing space (after punctuation).
                             if opt.space {
                                 enigo.key_sequence(" ");
                             }

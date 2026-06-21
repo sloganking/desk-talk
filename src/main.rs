@@ -287,9 +287,19 @@ fn main() {
         }
     }
 
+    // Parse --smart-punctuation / --no-smart-punctuation (overrides config).
+    if args.iter().any(|a| a == "--smart-punctuation") {
+        config.smart_punctuation = true;
+        println!("Smart punctuation enabled via CLI");
+    } else if args.iter().any(|a| a == "--no-smart-punctuation") {
+        config.smart_punctuation = false;
+        println!("Smart punctuation disabled via CLI");
+    }
+
     println!("Parallel transcription: {}", config.parallel);
     println!("Realtime streaming: {}", config.realtime);
     println!("Realtime delay: {}", config.realtime_delay);
+    println!("Smart punctuation: {}", config.smart_punctuation);
 
     let app_state = AppState::new(config);
 

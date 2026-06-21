@@ -550,6 +550,83 @@ pub mod trans {
             .ok_or_else(|| Box::<dyn Error>::from(anyhow!("No response from OpenAI")))
     }
 
+    /// Returns true if `c` is a sentence-ending punctuation mark (covers a few
+    /// non-Latin scripts so smart punctuation works across languages).
+    pub fn is_terminal_punct(c: char) -> bool {
+        matches!(
+            c,
+            '.' | '!' | '?' | '。' | '！' | '？' | '…' | '।' | '۔'
+        )
+    }
+
+    /// Asks a cheap, fast model (gpt-4o-mini) what single punctuation mark, if
+    /// any, should end the given utterance. Returns just the mark (e.g. "?",
+    /// ".", "!") or an empty string if none is appropriate. Language-aware.
+    /// Has a short timeout so it never hangs the dictation flow.
+    pub async fn decide_end_punctuation(
+        client: &Client<OpenAIConfig>,
+        text: &str,
+    ) -> Result<String, Box<dyn Error>> {
+        // Only send the tail; the ending only depends on the last sentence(s),
+        // and this keeps the request small and fast.
+        let tail: String = {
+            let chars: Vec<char> = text.chars().collect();
+            if chars.len() > 400 {
+                chars[chars.len() - 400..].iter().collect()
+            } else {
+                text.to_string()
+            }
+        };
+        if tail.trim().is_empty() {
+            return Ok(String::new());
+        }
+
+        let system_message = ChatCompletionRequestMessage {
+            role: Role::System,
+            content: Some(
+                "You decide the correct ending punctuation for a transcribed spoken utterance. \
+                 Detect the language of the text and choose the mark that a native writer would \
+                 put at the very end (for example . ? !). Reply with ONLY that single punctuation \
+                 character and nothing else: no words, no quotes, no spaces, no explanation. If no \
+                 ending punctuation is appropriate, reply with an empty response."
+                    .to_string(),
+            ),
+            name: None,
+            function_call: None,
+        };
+
+        let user_message = ChatCompletionRequestMessage {
+            role: Role::User,
+            content: Some(tail),
+            name: None,
+            function_call: None,
+        };
+
+        let request = CreateChatCompletionRequestArgs::default()
+            .model("gpt-4o-mini")
+            .messages(vec![system_message, user_message])
+            .temperature(0.0)
+            .max_tokens(4u16)
+            .build()
+            .context("Failed to build punctuation decision request")?;
+
+        let response =
+            match future::timeout(Duration::from_secs(8), client.chat().create(request)).await {
+                Ok(result) => result.context("Punctuation decision request failed")?,
+                Err(_) => return Err(anyhow!("Punctuation decision timed out").into()),
+            };
+
+        let raw = response
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.clone())
+            .unwrap_or_default();
+
+        // Keep only terminal punctuation characters from the reply.
+        let mark: String = raw.trim().chars().filter(|c| is_terminal_punct(*c)).collect();
+        Ok(mark)
+    }
+
     /// Uses GPT-4o-mini to add punctuation to text that is missing it.
     /// Has a 10-second timeout to prevent hanging.
     pub async fn fix_punctuation_with_openai(
