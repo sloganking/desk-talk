@@ -40,6 +40,29 @@
             </div>
 
             <div class="section">
+                <h2>Transcription Mode <span class="info-icon" title="Standard records your audio then transcribes it after you release the key (highest accuracy, supports parallel racing). Realtime streams to gpt-realtime-whisper and types text live as you speak (lower latency). Realtime requires the OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span></h2>
+                <select id="transcriptionSpeed">
+                    <option value="standard">Standard (transcribe after release)</option>
+                    <option value="realtime">Realtime (types as you speak)</option>
+                </select>
+
+                <!-- Realtime-only options -->
+                <div id="realtimeOptions" style="display: none; margin-top: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <span>Accuracy / latency:</span>
+                        <select id="realtimeDelay" style="width: auto;">
+                            <option value="minimal">Minimal (fastest)</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="xhigh" selected>Extra high (most accurate)</option>
+                        </select>
+                    </label>
+                    <p class="hint">Higher = more audio context before text appears = better accuracy, but text trails a bit further behind your voice.</p>
+                </div>
+            </div>
+
+            <div class="section">
                 <h2>Options</h2>
                 <label class="checkbox">
                     <input type="checkbox" id="capFirst">
@@ -65,14 +88,9 @@
                     <span class="info-icon" title="Slower but works with applications that don't understand Ctrl+V" onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label class="checkbox">
-                    <input type="checkbox" id="realtime">
-                    <span>Realtime streaming transcription</span>
-                    <span class="info-icon" title="Streams audio to OpenAI and types the text live as you speak (lower latency, visual feedback) instead of transcribing the whole recording at the end. Requires OpenAI API (not local). Uses the gpt-realtime-whisper model." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
-                </label>
-                <label class="checkbox">
                     <input type="checkbox" id="smartPunctuation">
                     <span>Smart end punctuation</span>
-                    <span class="info-icon" title="After you finish speaking, a cheap AI model picks the correct ending punctuation (. ? !, language-aware) and fixes it — e.g. turns a wrong period into a question mark. Adds a small delay after you release the key. Supersedes 'Always end with period'. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                    <span class="info-icon" title="After you finish speaking, a cheap AI model picks the correct ending punctuation (. ? !, language-aware) and fixes it — e.g. turns a wrong period into a question mark. Works in both modes. Supersedes 'Always end with period'. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="autoStart">
@@ -88,8 +106,8 @@
                 </label>
             </div>
 
-            <div class="section">
-                <h2>Parallel Racing <span class="info-icon" title="Sends multiple transcription requests simultaneously and uses the fastest response. Reduces latency and improves reliability at the cost of extra API usage. For example, 3 means triple API cost but much faster and more reliable results.">ⓘ</span></h2>
+            <div class="section" id="parallelSection">
+                <h2>Parallel Racing <span class="info-icon" title="Standard mode only. Sends multiple transcription requests simultaneously and uses the fastest response. Reduces latency and improves reliability at the cost of extra API usage. For example, 3 means triple API cost but much faster and more reliable results.">ⓘ</span></h2>
                 <label class="checkbox">
                     <input type="checkbox" id="parallelEnabled">
                     <span>Enable parallel racing</span>

@@ -114,6 +114,26 @@ document.querySelectorAll('input[name="transcriptionMode"]').forEach(radio => {
     });
 });
 
+// Show/hide mode-specific options: realtime delay only in Realtime mode,
+// Parallel Racing only in Standard mode.
+function updateModeVisibility() {
+    const speedEl = document.getElementById('transcriptionSpeed');
+    const isRealtime = speedEl && speedEl.value === 'realtime';
+    const realtimeOptions = document.getElementById('realtimeOptions');
+    const parallelSection = document.getElementById('parallelSection');
+    if (realtimeOptions) {
+        realtimeOptions.style.display = isRealtime ? 'block' : 'none';
+    }
+    if (parallelSection) {
+        parallelSection.style.display = isRealtime ? 'none' : 'block';
+    }
+}
+
+const transcriptionSpeedEl = document.getElementById('transcriptionSpeed');
+if (transcriptionSpeedEl) {
+    transcriptionSpeedEl.addEventListener('change', updateModeVisibility);
+}
+
 // Load configuration on startup
 async function loadConfig() {
     try {
@@ -132,9 +152,13 @@ async function loadConfig() {
         document.getElementById('punctuation').checked = config.punctuation || false;
         document.getElementById('period').checked = config.period || false;
         document.getElementById('typeChars').checked = config.type_chars || false;
-        document.getElementById('realtime').checked = config.realtime || false;
-        document.getElementById('smartPunctuation').checked = config.smart_punctuation || false;
+        document.getElementById('smartPunctuation').checked = config.smart_punctuation !== false;
         document.getElementById('autoStart').checked = config.auto_start || false;
+
+        // Transcription mode (Standard vs Realtime) and realtime delay
+        document.getElementById('transcriptionSpeed').value = config.realtime ? 'realtime' : 'standard';
+        document.getElementById('realtimeDelay').value = config.realtime_delay || 'xhigh';
+        updateModeVisibility();
         document.getElementById('startMinimized').checked = config.start_minimized || false;
         document.getElementById('darkMode').checked = config.dark_mode || false;
         
@@ -510,7 +534,8 @@ async function saveConfig() {
                 punctuation: document.getElementById('punctuation').checked,
                 period: document.getElementById('period').checked,
                 type_chars: document.getElementById('typeChars').checked,
-                realtime: document.getElementById('realtime').checked,
+                realtime: document.getElementById('transcriptionSpeed').value === 'realtime',
+                realtime_delay: document.getElementById('realtimeDelay').value,
                 smart_punctuation: document.getElementById('smartPunctuation').checked,
                 auto_start: document.getElementById('autoStart').checked,
                 start_minimized: document.getElementById('startMinimized').checked,
@@ -558,7 +583,8 @@ async function saveConfig() {
             punctuation: document.getElementById('punctuation').checked,
             period: document.getElementById('period').checked,
             type_chars: document.getElementById('typeChars').checked,
-            realtime: document.getElementById('realtime').checked,
+            realtime: document.getElementById('transcriptionSpeed').value === 'realtime',
+            realtime_delay: document.getElementById('realtimeDelay').value,
             smart_punctuation: document.getElementById('smartPunctuation').checked,
             auto_start: document.getElementById('autoStart').checked,
             start_minimized: document.getElementById('startMinimized').checked,
