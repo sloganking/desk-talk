@@ -12,6 +12,8 @@ https://github.com/sloganking/desk-talk/assets/16965931/e5da605b-3a9d-4394-b4ec-
 ## Features
 
 ✨ **Push-to-Talk Transcription** - Hold a key, speak, release to paste  
+⚡ **Realtime Streaming** - Types text live *as you speak* via `gpt-realtime-whisper`  
+✒️ **Smart End Punctuation** - An AI picks the correct ending mark (. ? !, language-aware)  
 🎯 **System Tray Integration** - Runs quietly in the background  
 ⚙️ **Modern GUI Settings** - Beautiful, easy-to-use configuration interface  
 📊 **WPM Statistics** - Track your words per minute with rolling averages  
@@ -81,6 +83,59 @@ WPM: 132.4 (27 words over 12.25s) | Avg: 118.7
 - **Word count** - Number of words spoken
 - **Duration** - Time from key press to release
 - **Rolling average** - Average of your last 1000 transcriptions
+
+## Transcription modes
+
+DeskTalk has two ways to turn your speech into text. Pick one in **General → Transcription Mode**.
+
+### Standard (record, then transcribe)
+
+Records your audio to a temporary file while you hold the key, then transcribes
+the whole thing once you release. Highest fidelity, since the model sees the
+entire recording at once. Supports **Parallel Racing** (send multiple requests
+at once and use the fastest/most reliable result).
+
+### Realtime (types as you speak)
+
+Streams your microphone to OpenAI's `gpt-realtime-whisper` model over a
+WebSocket and types the words into the focused window **live, as you talk** —
+much lower perceived latency and a visual sense of progress. Requires the OpenAI
+API (not available in local mode).
+
+- **Accuracy / latency** is tunable with the **delay** setting:
+  `minimal → low → medium → high → xhigh`. Higher gives the model more audio
+  context before it commits text (better accuracy, text trails a bit further
+  behind your voice). Default: `xhigh`.
+- A debug log of each realtime session is written next to your config at
+  `%APPDATA%\desk-talk\desk-talk\config\realtime.log`.
+
+## Smart end punctuation
+
+When enabled (default on), after you finish speaking a cheap, fast model
+(`gpt-4o-mini`) decides the correct **ending** punctuation for what you said —
+`.`, `?`, `!`, or the appropriate mark for your language — and fixes it (e.g.
+turns a wrong period into a question mark). It works in **both** transcription
+modes, supersedes the simpler "always end with period" option, and falls back to
+that option if the API call fails. Requires the OpenAI API.
+
+## Command-line flags
+
+The GUI app reads a few flags at launch that **override** the saved settings for
+that run (handy for launchers/scripts). If a flag isn't passed, the saved
+setting is used.
+
+| Flag | Description |
+| --- | --- |
+| `--realtime` / `--no-realtime` | Force realtime streaming on / off |
+| `--realtime-delay <level>` | `minimal`, `low`, `medium`, `high`, or `xhigh` |
+| `--smart-punctuation` / `--no-smart-punctuation` | Force smart end punctuation on / off |
+| `--parallel <n>` | Number of parallel requests to race (Standard mode), 1–5 |
+
+Example:
+
+```bash
+desk-talk.exe --realtime --realtime-delay xhigh --smart-punctuation
+```
 
 ## Building from Source
 
