@@ -49,12 +49,16 @@ pub struct AppConfig {
     pub realtime_delay: String,
     /// After you finish speaking, use a cheap LLM to choose the correct ending
     /// punctuation (. ? !, language-aware) instead of the dumb --period rule.
-    #[serde(default)]
+    #[serde(default = "default_smart_punctuation")]
     pub smart_punctuation: bool,
 }
 
 fn default_realtime_delay() -> String {
-    "high".to_string()
+    "xhigh".to_string()
+}
+
+fn default_smart_punctuation() -> bool {
+    true
 }
 
 /// Returns the delay if it's a valid level, otherwise the default ("high").
@@ -94,7 +98,7 @@ impl Default for AppConfig {
             parallel: default_parallel(),
             realtime: false,
             realtime_delay: default_realtime_delay(),
-            smart_punctuation: false,
+            smart_punctuation: default_smart_punctuation(),
         }
     }
 }
