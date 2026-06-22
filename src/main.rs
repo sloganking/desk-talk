@@ -287,19 +287,37 @@ fn main() {
         }
     }
 
-    // Parse --smart-punctuation / --no-smart-punctuation (overrides config).
-    if args.iter().any(|a| a == "--smart-punctuation") {
-        config.smart_punctuation = true;
-        println!("Smart punctuation enabled via CLI");
+    // Parse --end-punctuation <none|period|smart> (overrides config). This
+    // single valued flag replaces the old mutually-exclusive --period /
+    // --smart-punctuation booleans. Aliases kept for convenience.
+    if let Some(pos) = args.iter().position(|a| a == "--end-punctuation") {
+        if let Some(val) = args.get(pos + 1) {
+            let sanitized = config::sanitize_end_punctuation(val);
+            if sanitized.eq_ignore_ascii_case(val) {
+                config.end_punctuation = sanitized;
+                println!("End punctuation set to {} via CLI", config.end_punctuation);
+            } else {
+                println!(
+                    "Invalid --end-punctuation '{}'. Valid: none, period, smart. Using {}.",
+                    val, config.end_punctuation
+                );
+            }
+        }
+    } else if args.iter().any(|a| a == "--smart-punctuation") {
+        config.end_punctuation = "smart".to_string();
+        println!("End punctuation set to smart via CLI");
     } else if args.iter().any(|a| a == "--no-smart-punctuation") {
-        config.smart_punctuation = false;
-        println!("Smart punctuation disabled via CLI");
+        config.end_punctuation = "none".to_string();
+        println!("End punctuation set to none via CLI");
+    } else if args.iter().any(|a| a == "--period") {
+        config.end_punctuation = "period".to_string();
+        println!("End punctuation set to period via CLI");
     }
 
     println!("Parallel transcription: {}", config.parallel);
     println!("Realtime streaming: {}", config.realtime);
     println!("Realtime delay: {}", config.realtime_delay);
-    println!("Smart punctuation: {}", config.smart_punctuation);
+    println!("End punctuation: {}", config.end_punctuation);
 
     let app_state = AppState::new(config);
 

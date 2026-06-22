@@ -109,14 +109,22 @@ API (not available in local mode).
 - A debug log of each realtime session is written next to your config at
   `%APPDATA%\desk-talk\desk-talk\config\realtime.log`.
 
-## Smart end punctuation
+## End punctuation
 
-When enabled (default on), after you finish speaking a cheap, fast model
-(`gpt-4o-mini`) decides the correct **ending** punctuation for what you said —
-`.`, `?`, `!`, or the appropriate mark for your language — and fixes it (e.g.
-turns a wrong period into a question mark). It works in **both** transcription
-modes, supersedes the simpler "always end with period" option, and falls back to
-that option if the API call fails. Requires the OpenAI API.
+A single setting controls the mark at the end of each utterance (the old
+mutually-exclusive "always end with period" and "smart punctuation" toggles are
+now one choice):
+
+- **None** – leave the ending exactly as transcribed.
+- **Period** – add a plain `.` if it doesn't already end with `.`, `?`, or `!`.
+- **Smart** (default) – a cheap, fast model (`gpt-4o-mini`) picks the correct
+  ending mark for what you said — `.`, `?`, `!`, or the appropriate mark for your
+  language. It works in **both** transcription modes and requires the OpenAI API.
+
+Smart mode **skips the LLM call entirely** when the text already ends with a
+terminal mark — detecting that punctuation is present is a trivial local check
+and needs no model — so you only pay for an API call when a mark is actually
+missing.
 
 ## Command-line flags
 
@@ -128,13 +136,17 @@ setting is used.
 | --- | --- |
 | `--realtime` / `--no-realtime` | Force realtime streaming on / off |
 | `--realtime-delay <level>` | `minimal`, `low`, `medium`, `high`, or `xhigh` |
-| `--smart-punctuation` / `--no-smart-punctuation` | Force smart end punctuation on / off |
+| `--end-punctuation <mode>` | `none`, `period`, or `smart` |
 | `--parallel <n>` | Number of parallel requests to race (Standard mode), 1–5 |
+
+`--period`, `--smart-punctuation`, and `--no-smart-punctuation` are kept as
+aliases for `--end-punctuation period`, `--end-punctuation smart`, and
+`--end-punctuation none` respectively.
 
 Example:
 
 ```bash
-desk-talk.exe --realtime --realtime-delay xhigh --smart-punctuation
+desk-talk.exe --realtime --realtime-delay xhigh --end-punctuation smart
 ```
 
 ## Building from Source

@@ -150,9 +150,8 @@ async function loadConfig() {
         document.getElementById('capFirst').checked = config.cap_first || false;
         document.getElementById('space').checked = config.space || false;
         document.getElementById('punctuation').checked = config.punctuation || false;
-        document.getElementById('period').checked = config.period || false;
         document.getElementById('typeChars').checked = config.type_chars || false;
-        document.getElementById('smartPunctuation').checked = config.smart_punctuation !== false;
+        document.getElementById('endPunctuation').value = config.end_punctuation || 'smart';
         document.getElementById('autoStart').checked = config.auto_start || false;
 
         // Transcription mode (Standard vs Realtime) and realtime delay
@@ -532,11 +531,10 @@ async function saveConfig() {
                 cap_first: document.getElementById('capFirst').checked,
                 space: document.getElementById('space').checked,
                 punctuation: document.getElementById('punctuation').checked,
-                period: document.getElementById('period').checked,
                 type_chars: document.getElementById('typeChars').checked,
                 realtime: document.getElementById('transcriptionSpeed').value === 'realtime',
                 realtime_delay: document.getElementById('realtimeDelay').value,
-                smart_punctuation: document.getElementById('smartPunctuation').checked,
+                end_punctuation: document.getElementById('endPunctuation').value,
                 auto_start: document.getElementById('autoStart').checked,
                 start_minimized: document.getElementById('startMinimized').checked,
                 dark_mode: document.getElementById('darkMode').checked,
@@ -581,11 +579,10 @@ async function saveConfig() {
             cap_first: document.getElementById('capFirst').checked,
             space: document.getElementById('space').checked,
             punctuation: document.getElementById('punctuation').checked,
-            period: document.getElementById('period').checked,
             type_chars: document.getElementById('typeChars').checked,
             realtime: document.getElementById('transcriptionSpeed').value === 'realtime',
             realtime_delay: document.getElementById('realtimeDelay').value,
-            smart_punctuation: document.getElementById('smartPunctuation').checked,
+            end_punctuation: document.getElementById('endPunctuation').value,
             auto_start: document.getElementById('autoStart').checked,
             start_minimized: document.getElementById('startMinimized').checked,
             dark_mode: document.getElementById('darkMode').checked,

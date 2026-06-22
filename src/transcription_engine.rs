@@ -5,7 +5,7 @@ use crate::transcribe::trans;
 use async_openai::Client;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use default_device_sink::DefaultDeviceSink;
-use enigo::{Enigo, Key, KeyboardControllable};
+use enigo::{Enigo, KeyboardControllable};
 use parking_lot::Mutex;
 use rdev::Event;
 use rodio::{source::SineWave, Decoder, Source};
@@ -303,56 +303,49 @@ impl TranscriptionEngine {
                             }
 
                             // Text was already typed live during the stream, so
-                            // any final punctuation post-processing is applied now.
-                            // Smart punctuation (LLM-decided) supersedes --period.
-                            let mut smart_applied = false;
-                            if opt.smart_punctuation {
-                                match runtime
-                                    .block_on(trans::decide_end_punctuation(&client, trimmed))
-                                {
-                                    Ok(mark) => {
-                                        // Whatever terminal punctuation is already
-                                        // typed at the end (often none, sometimes
-                                        // a wrong "." or model-added mark).
-                                        let existing: String = trimmed
-                                            .chars()
-                                            .rev()
-                                            .take_while(|c| trans::is_terminal_punct(*c))
-                                            .collect::<Vec<_>>()
-                                            .into_iter()
-                                            .rev()
-                                            .collect();
-                                        if mark != existing {
-                                            for _ in 0..existing.chars().count() {
-                                                enigo.key_click(Key::Backspace);
+                            // any final ending-punctuation post-processing is
+                            // applied now via enigo. The mode is a single setting
+                            // ("none" | "period" | "smart"); they're mutually
+                            // exclusive so there's no "LLM undoing a period" case.
+                            let already_punctuated = trimmed
+                                .chars()
+                                .last()
+                                .map(|c| trans::is_terminal_punct(c))
+                                .unwrap_or(false);
+
+                            match opt.end_punctuation.as_str() {
+                                "period" => {
+                                    if !already_punctuated {
+                                        enigo.key_sequence(".");
+                                    }
+                                }
+                                "smart" => {
+                                    // If it already ends with a terminal mark,
+                                    // trust it and skip the LLM call entirely —
+                                    // detecting *presence* needs no intelligence.
+                                    if already_punctuated {
+                                        println!(
+                                            "Smart punctuation: already punctuated, skipping LLM"
+                                        );
+                                    } else {
+                                        match runtime.block_on(trans::decide_end_punctuation(
+                                            &client, trimmed,
+                                        )) {
+                                            Ok(mark) => {
+                                                if !mark.is_empty() {
+                                                    enigo.key_sequence(&mark);
+                                                }
                                             }
-                                            if !mark.is_empty() {
-                                                enigo.key_sequence(&mark);
+                                            Err(err) => {
+                                                eprintln!(
+                                                    "Smart punctuation failed: {:?}",
+                                                    err
+                                                );
                                             }
                                         }
-                                        smart_applied = true;
-                                    }
-                                    Err(err) => {
-                                        eprintln!(
-                                            "Smart punctuation failed: {:?}; falling back to --period",
-                                            err
-                                        );
                                     }
                                 }
-                            }
-
-                            // --period: add a period if the text doesn't already
-                            // end with sentence-ending punctuation (skipped when
-                            // smart punctuation already handled the ending).
-                            if !smart_applied && opt.period {
-                                let ends_with_punct = trimmed
-                                    .chars()
-                                    .last()
-                                    .map(|c| matches!(c, '.' | '!' | '?'))
-                                    .unwrap_or(false);
-                                if !ends_with_punct {
-                                    enigo.key_sequence(".");
-                                }
+                                _ => {}
                             }
 
                             // --space: type a trailing space (after punctuation).
@@ -473,12 +466,23 @@ impl TranscriptionEngine {
                                 }
                             }
 
-                            // Smart end punctuation (LLM-decided, language-aware).
-                            // Supersedes --period. Needs the OpenAI API, so it's
-                            // skipped in local mode. Runs while the tick still
-                            // plays since it's a network call.
-                            let mut smart_applied = false;
-                            if opt.smart_punctuation && !opt.use_local {
+                            // Ending punctuation (single mutually-exclusive mode:
+                            // "none" | "period" | "smart"). Smart mode needs the
+                            // OpenAI API, so it's skipped in local mode, and it's
+                            // skipped when the text already ends with a terminal
+                            // mark (no LLM needed just to detect presence). The
+                            // network call runs while the tick still plays.
+                            let already_punctuated = transcription
+                                .trim_end()
+                                .chars()
+                                .last()
+                                .map(|c| trans::is_terminal_punct(c))
+                                .unwrap_or(false);
+
+                            if opt.end_punctuation == "smart"
+                                && !opt.use_local
+                                && !already_punctuated
+                            {
                                 match runtime.block_on(trans::decide_end_punctuation(
                                     &client,
                                     transcription.trim(),
@@ -494,13 +498,9 @@ impl TranscriptionEngine {
                                         } else {
                                             format!("{}{}", stripped, mark)
                                         };
-                                        smart_applied = true;
                                     }
                                     Err(err) => {
-                                        println!(
-                                            "Smart punctuation failed: {:?}; falling back to --period",
-                                            err
-                                        );
+                                        println!("Smart punctuation failed: {:?}", err);
                                     }
                                 }
                             }
@@ -508,13 +508,9 @@ impl TranscriptionEngine {
                             let _ = tick_tx.send(());
                             let _ = tick_handle.join();
 
-                            if !smart_applied && opt.period {
+                            if opt.end_punctuation == "period" && !already_punctuated {
                                 let trimmed = transcription.trim_end();
-                                if let Some(last_char) = trimmed.chars().last() {
-                                    if !matches!(last_char, '.' | '!' | '?') {
-                                        transcription = format!("{}.", trimmed);
-                                    }
-                                }
+                                transcription = format!("{}.", trimmed);
                             }
 
                             if opt.cap_first {

@@ -20,9 +20,6 @@ pub struct AppConfig {
     pub type_chars: bool,
     #[serde(default)]
     pub punctuation: bool,
-    /// Always add a period at the end if text doesn't end with .!?
-    #[serde(default)]
-    pub period: bool,
     #[serde(default)]
     pub auto_start: bool,
     #[serde(default)]
@@ -47,18 +44,31 @@ pub struct AppConfig {
     /// before emitting text = better accuracy but more delay.
     #[serde(default = "default_realtime_delay")]
     pub realtime_delay: String,
-    /// After you finish speaking, use a cheap LLM to choose the correct ending
-    /// punctuation (. ? !, language-aware) instead of the dumb --period rule.
-    #[serde(default = "default_smart_punctuation")]
-    pub smart_punctuation: bool,
+    /// How the end of an utterance is punctuated. One of:
+    ///   "none"   - leave the ending exactly as transcribed
+    ///   "period" - add a plain "." if it doesn't already end with . ? !
+    ///   "smart"  - use a cheap LLM to choose the correct mark (. ? !,
+    ///              language-aware)
+    /// These are mutually exclusive by design, so this replaces the old
+    /// separate `period` / `smart_punctuation` booleans.
+    #[serde(default = "default_end_punctuation", alias = "end_punct")]
+    pub end_punctuation: String,
 }
 
 fn default_realtime_delay() -> String {
     "xhigh".to_string()
 }
 
-fn default_smart_punctuation() -> bool {
-    true
+fn default_end_punctuation() -> String {
+    "smart".to_string()
+}
+
+/// Returns the mode if it's valid, otherwise the default ("smart").
+pub fn sanitize_end_punctuation(value: &str) -> String {
+    match value.to_lowercase().as_str() {
+        v @ ("none" | "period" | "smart") => v.to_string(),
+        _ => default_end_punctuation(),
+    }
 }
 
 /// Returns the delay if it's a valid level, otherwise the default ("high").
@@ -89,7 +99,6 @@ impl Default for AppConfig {
             space: false,
             type_chars: false,
             punctuation: false,
-            period: false,
             auto_start: false,
             start_minimized: false,
             dark_mode: false,
@@ -98,7 +107,7 @@ impl Default for AppConfig {
             parallel: default_parallel(),
             realtime: false,
             realtime_delay: default_realtime_delay(),
-            smart_punctuation: default_smart_punctuation(),
+            end_punctuation: default_end_punctuation(),
         }
     }
 }

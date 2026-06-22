@@ -77,20 +77,19 @@
                     <span>Auto-fix missing punctuation</span>
                     <span class="info-icon" title="If transcription has no periods, question marks, or exclamation points, uses AI to add punctuation. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
-                <label class="checkbox">
-                    <input type="checkbox" id="period">
-                    <span>Always end with period</span>
-                    <span class="info-icon" title="Adds a period at the end if the transcription doesn't already end with punctuation (.!?). Useful when Whisper doesn't know if you're finished speaking." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                <label style="display: flex; align-items: center; gap: 8px; margin: 6px 0;">
+                    <span>End punctuation:</span>
+                    <select id="endPunctuation" style="width: auto;">
+                        <option value="none">None (leave as-is)</option>
+                        <option value="period">Period (always add ".")</option>
+                        <option value="smart" selected>Smart (AI picks . ? !)</option>
+                    </select>
+                    <span class="info-icon" title="Controls the mark at the end of each utterance. None leaves it untouched. Period adds a plain '.' if it doesn't already end with .!?. Smart uses a cheap AI model to pick the right mark (. ? !, language-aware); it skips the AI call when the text already ends with punctuation. Smart requires the OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="typeChars">
                     <span>Type characters instead of pasting</span>
                     <span class="info-icon" title="Slower but works with applications that don't understand Ctrl+V" onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
-                </label>
-                <label class="checkbox">
-                    <input type="checkbox" id="smartPunctuation">
-                    <span>Smart end punctuation</span>
-                    <span class="info-icon" title="After you finish speaking, a cheap AI model picks the correct ending punctuation (. ? !, language-aware) and fixes it — e.g. turns a wrong period into a question mark. Works in both modes. Supersedes 'Always end with period'. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="autoStart">
