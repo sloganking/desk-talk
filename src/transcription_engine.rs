@@ -473,10 +473,42 @@ impl TranscriptionEngine {
                                 }
                             }
 
+                            // Smart end punctuation (LLM-decided, language-aware).
+                            // Supersedes --period. Needs the OpenAI API, so it's
+                            // skipped in local mode. Runs while the tick still
+                            // plays since it's a network call.
+                            let mut smart_applied = false;
+                            if opt.smart_punctuation && !opt.use_local {
+                                match runtime.block_on(trans::decide_end_punctuation(
+                                    &client,
+                                    transcription.trim(),
+                                )) {
+                                    Ok(mark) => {
+                                        let stripped = transcription
+                                            .trim_end()
+                                            .trim_end_matches(|c| trans::is_terminal_punct(c))
+                                            .trim_end()
+                                            .to_string();
+                                        transcription = if mark.is_empty() {
+                                            stripped
+                                        } else {
+                                            format!("{}{}", stripped, mark)
+                                        };
+                                        smart_applied = true;
+                                    }
+                                    Err(err) => {
+                                        println!(
+                                            "Smart punctuation failed: {:?}; falling back to --period",
+                                            err
+                                        );
+                                    }
+                                }
+                            }
+
                             let _ = tick_tx.send(());
                             let _ = tick_handle.join();
 
-                            if opt.period {
+                            if !smart_applied && opt.period {
                                 let trimmed = transcription.trim_end();
                                 if let Some(last_char) = trimmed.chars().last() {
                                     if !matches!(last_char, '.' | '!' | '?') {
