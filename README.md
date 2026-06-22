@@ -86,7 +86,7 @@ WPM: 132.4 (27 words over 12.25s) | Avg: 118.7
 
 ## Transcription modes
 
-DeskTalk has two ways to turn your speech into text. Pick one in **General → Transcription Mode**.
+DeskTalk has two ways to turn your speech into text. Pick one in **General → Transcription Mode**. The out-of-the-box default is **Realtime** (with `xhigh` accuracy and smart end punctuation) so it "just works" with the least fuss; switch to Standard or dial settings down if you want to save on API cost.
 
 ### Standard (record, then transcribe)
 

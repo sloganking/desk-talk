@@ -84,7 +84,7 @@ fn default_typing_wpm() -> u32 {
 }
 
 fn default_parallel() -> usize {
-    1
+    2
 }
 
 impl Default for AppConfig {
@@ -95,8 +95,8 @@ impl Default for AppConfig {
             device: String::from("default"),
             use_local: false,
             local_model: None,
-            cap_first: false,
-            space: false,
+            cap_first: true,
+            space: true,
             type_chars: false,
             punctuation: false,
             auto_start: false,
@@ -105,7 +105,7 @@ impl Default for AppConfig {
             api_key: None,
             typing_wpm: default_typing_wpm(),
             parallel: default_parallel(),
-            realtime: false,
+            realtime: true,
             realtime_delay: default_realtime_delay(),
             end_punctuation: default_end_punctuation(),
         }
