@@ -72,10 +72,10 @@
                     <input type="checkbox" id="space">
                     <span>Add space after transcription</span>
                 </label>
-                <label class="checkbox">
+                <label class="checkbox standard-only" id="punctuationRow">
                     <input type="checkbox" id="punctuation">
                     <span>Auto-fix missing punctuation</span>
-                    <span class="info-icon" title="If transcription has no periods, question marks, or exclamation points, uses AI to add punctuation. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                    <span class="info-icon" title="Standard mode only. If transcription has no periods, question marks, or exclamation points, uses AI to add punctuation. Requires OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 8px; margin: 6px 0;">
                     <span>End punctuation:</span>
@@ -86,10 +86,10 @@
                     </select>
                     <span class="info-icon" title="Controls the mark at the end of each utterance. None leaves it untouched. Period adds a plain '.' if it doesn't already end with .!?. Smart uses a cheap AI model to pick the right mark (. ? !, language-aware); it skips the AI call when the text already ends with punctuation. Smart requires the OpenAI API." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
-                <label class="checkbox">
+                <label class="checkbox standard-only" id="typeCharsRow">
                     <input type="checkbox" id="typeChars">
                     <span>Type characters instead of pasting</span>
-                    <span class="info-icon" title="Slower but works with applications that don't understand Ctrl+V" onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
+                    <span class="info-icon" title="Standard mode only. Slower but works with applications that don't understand Ctrl+V. Realtime mode always types characters live." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="autoStart">

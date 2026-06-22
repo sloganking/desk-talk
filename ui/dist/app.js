@@ -127,6 +127,11 @@ function updateModeVisibility() {
     if (parallelSection) {
         parallelSection.style.display = isRealtime ? 'none' : 'block';
     }
+    // Options that only take effect in Standard mode: hide them in Realtime so
+    // the UI only shows settings that actually do something for the chosen mode.
+    document.querySelectorAll('.standard-only').forEach((el) => {
+        el.style.display = isRealtime ? 'none' : 'flex';
+    });
 }
 
 const transcriptionSpeedEl = document.getElementById('transcriptionSpeed');
