@@ -395,8 +395,17 @@ async fn run_session(
                 return;
             }
             let mut to_type = text.to_string();
-            if cap_first && !*typed_first {
-                capitalize_first_letter(&mut to_type);
+            if !*typed_first {
+                // The realtime model prefixes the first delta of a session with
+                // a leading space; strip it so dictation doesn't begin with a
+                // stray space (especially annoying at the start of a new line).
+                to_type = to_type.trim_start().to_string();
+                if to_type.is_empty() {
+                    return; // delta was only whitespace; wait for real text
+                }
+                if cap_first {
+                    capitalize_first_letter(&mut to_type);
+                }
             }
             *typed_first = true;
             accumulated.push_str(&to_type);
