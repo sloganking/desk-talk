@@ -32,6 +32,15 @@
             </div>
 
             <div class="section">
+                <h2>Push-to-Talk Behavior <span class="info-icon" title="Hold-to-talk records while you hold the key down and stops when you release it. Toggle-to-talk starts recording on one press and stops on the next press, so you don't have to keep the key held during long dictations. Both play the same low beep on start and high beep on stop." onclick="event.preventDefault(); event.stopPropagation();">ⓘ</span></h2>
+                <select id="pttMode">
+                    <option value="hold" selected>Hold to talk (record while held)</option>
+                    <option value="toggle">Toggle to talk (press once to start, once to stop)</option>
+                </select>
+                <p class="hint">Toggle mode saves your thumb on long dictations. The start and stop beeps are the same either way.</p>
+            </div>
+
+            <div class="section">
                 <h2>Audio Device</h2>
                 <select id="audioDevice">
                     <option value="default">Default Device</option>

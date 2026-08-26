@@ -1,3 +1,12 @@
+// NOT COMPILED. This is the old standalone CLI entry point, kept for reference.
+// Cargo declares no [[bin]] targets and this file is neither `src/main.rs` nor
+// under `src/bin/`, so it is never built; `src/main.rs` (the Tauri app) is the
+// only binary. Its push-to-talk loop below is therefore NOT the live one - the
+// live loop is `TranscriptionEngine::key_handler_thread` in
+// src/transcription_engine.rs, which is where toggle-to-talk was added. This
+// file was deliberately left on hold-to-talk rather than updated, because
+// changing dead code would imply it runs.
+
 use anyhow::Context;
 use async_openai::Client;
 use dotenvy::dotenv;

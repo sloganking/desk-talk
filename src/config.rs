@@ -53,6 +53,14 @@ pub struct AppConfig {
     /// separate `period` / `smart_punctuation` booleans.
     #[serde(default = "default_end_punctuation", alias = "end_punct")]
     pub end_punctuation: String,
+    /// How the push-to-talk key behaves. One of:
+    ///   "hold"   - record while the key is held down, stop on release
+    ///   "toggle" - press once to start, press again to stop; the key can be
+    ///              released in between
+    /// Both modes play the same low/high beeps, exactly one per transition, so
+    /// a long dictation no longer means holding the key down the whole time.
+    #[serde(default = "default_ptt_mode")]
+    pub ptt_mode: String,
 }
 
 fn default_realtime_delay() -> String {
@@ -61,6 +69,20 @@ fn default_realtime_delay() -> String {
 
 fn default_end_punctuation() -> String {
     "smart".to_string()
+}
+
+fn default_ptt_mode() -> String {
+    "hold".to_string()
+}
+
+/// Returns the mode if it's valid, otherwise the default ("hold"). Anything
+/// unrecognized falls back to hold-to-talk so a bad value can never leave the
+/// mic stuck open.
+pub fn sanitize_ptt_mode(value: &str) -> String {
+    match value.to_lowercase().as_str() {
+        v @ ("hold" | "toggle") => v.to_string(),
+        _ => default_ptt_mode(),
+    }
 }
 
 /// Returns the mode if it's valid, otherwise the default ("smart").
@@ -108,6 +130,7 @@ impl Default for AppConfig {
             realtime: true,
             realtime_delay: default_realtime_delay(),
             end_punctuation: default_end_punctuation(),
+            ptt_mode: default_ptt_mode(),
         }
     }
 }

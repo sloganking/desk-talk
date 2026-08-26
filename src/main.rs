@@ -271,6 +271,18 @@ fn main() {
         println!("Realtime streaming disabled via CLI");
     }
 
+    // Parse --toggle / --hold flags (override saved config). Toggle means press
+    // once to start recording and press again to stop, instead of holding the
+    // key down for the whole utterance. When neither is passed, the saved
+    // setting is kept.
+    if args.iter().any(|a| a == "--toggle") {
+        config.ptt_mode = "toggle".to_string();
+        println!("Toggle-to-talk enabled via CLI");
+    } else if args.iter().any(|a| a == "--hold") {
+        config.ptt_mode = "hold".to_string();
+        println!("Hold-to-talk enabled via CLI");
+    }
+
     // Parse --realtime-delay <minimal|low|medium|high|xhigh> (overrides config).
     if let Some(pos) = args.iter().position(|a| a == "--realtime-delay") {
         if let Some(val) = args.get(pos + 1) {
@@ -318,6 +330,8 @@ fn main() {
     println!("Realtime streaming: {}", config.realtime);
     println!("Realtime delay: {}", config.realtime_delay);
     println!("End punctuation: {}", config.end_punctuation);
+    config.ptt_mode = config::sanitize_ptt_mode(&config.ptt_mode);
+    println!("PTT mode: {}", config.ptt_mode);
 
     let app_state = AppState::new(config);
 

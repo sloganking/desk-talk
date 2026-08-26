@@ -157,6 +157,7 @@ async function loadConfig() {
         document.getElementById('punctuation').checked = config.punctuation || false;
         document.getElementById('typeChars').checked = config.type_chars || false;
         document.getElementById('endPunctuation').value = config.end_punctuation || 'smart';
+        document.getElementById('pttMode').value = config.ptt_mode || 'hold';
         document.getElementById('autoStart').checked = config.auto_start || false;
 
         // Transcription mode (Standard vs Realtime) and realtime delay
@@ -540,6 +541,7 @@ async function saveConfig() {
                 realtime: document.getElementById('transcriptionSpeed').value === 'realtime',
                 realtime_delay: document.getElementById('realtimeDelay').value,
                 end_punctuation: document.getElementById('endPunctuation').value,
+                ptt_mode: document.getElementById('pttMode').value,
                 auto_start: document.getElementById('autoStart').checked,
                 start_minimized: document.getElementById('startMinimized').checked,
                 dark_mode: document.getElementById('darkMode').checked,
@@ -588,6 +590,7 @@ async function saveConfig() {
             realtime: document.getElementById('transcriptionSpeed').value === 'realtime',
             realtime_delay: document.getElementById('realtimeDelay').value,
             end_punctuation: document.getElementById('endPunctuation').value,
+            ptt_mode: document.getElementById('pttMode').value,
             auto_start: document.getElementById('autoStart').checked,
             start_minimized: document.getElementById('startMinimized').checked,
             dark_mode: document.getElementById('darkMode').checked,

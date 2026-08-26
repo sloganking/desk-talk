@@ -95,6 +95,51 @@ fn needs_punctuation_fix(text: &str) -> bool {
     !text.chars().any(|c| matches!(c, '.' | '!' | '?'))
 }
 
+/// What a PTT key event means once the mode and the auto-repeat latch have
+/// been accounted for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum PttAction {
+    /// Nothing to do: a foreign key, an auto-repeat, or (in toggle mode) the
+    /// release half of a click.
+    Ignore,
+    Start,
+    Stop,
+}
+
+impl PttAction {
+    /// Decide what a PTT key event means. `pressed` is true for KeyPress and
+    /// false for KeyRelease; `key_held` is the physical-key latch and is
+    /// updated in place.
+    ///
+    /// The latch is load-bearing: rdev re-delivers KeyPress many times a second
+    /// while a key is physically held down (OS auto-repeat). Without it, a
+    /// toggle-mode press would start and stop the recording over and over for
+    /// as long as the key stayed down.
+    fn decide(pressed: bool, toggle_mode: bool, key_held: &mut bool, recording: bool) -> PttAction {
+        if pressed {
+            if *key_held {
+                return PttAction::Ignore; // auto-repeat while the key is held
+            }
+            *key_held = true;
+            if toggle_mode && recording {
+                PttAction::Stop
+            } else {
+                PttAction::Start
+            }
+        } else {
+            let was_held = *key_held;
+            *key_held = false;
+            // In toggle mode letting go is just the end of a click - the
+            // recording keeps running until the next press.
+            if toggle_mode || !was_held {
+                PttAction::Ignore
+            } else {
+                PttAction::Stop
+            }
+        }
+    }
+}
+
 pub struct TranscriptionEngine {
     app_state: AppState,
     stop_signal: Arc<Mutex<bool>>,
@@ -191,7 +236,12 @@ impl TranscriptionEngine {
         let voice_retry_path = tmp_dir.path().join("voice_retry.wav");
 
         let mut recording_start = std::time::SystemTime::now();
-        let mut key_pressed = false;
+        // `key_held` tracks whether the PTT key is physically down, which is
+        // what filters out OS auto-repeat. `recording` tracks whether we're
+        // actually capturing - in toggle mode the two come apart, because the
+        // key is up for almost the whole recording.
+        let mut key_held = false;
+        let mut recording = false;
         let mut last_transcription_failed = false;
         let mut last_recording_duration_secs: f64 = 0.0;
         let key_to_check = opt.get_ptt_key().unwrap();
@@ -201,6 +251,19 @@ impl TranscriptionEngine {
         // recording a WAV file and transcribing it at the end.
         let realtime_enabled = opt.realtime && !opt.use_local;
         let mut realtime_session: Option<crate::realtime::RealtimeSession> = None;
+
+        // Toggle mode: press once to start, press again to stop, instead of
+        // holding the key down for the whole utterance. Anything unrecognized
+        // falls back to hold-to-talk.
+        let toggle_mode = crate::config::sanitize_ptt_mode(&opt.ptt_mode) == "toggle";
+        println!(
+            "PTT mode: {}",
+            if toggle_mode {
+                "toggle (press to start, press again to stop)"
+            } else {
+                "hold (record while held)"
+            }
+        );
 
         if realtime_enabled {
             println!(
@@ -223,372 +286,387 @@ impl TranscriptionEngine {
                 println!("Stop signal received - shutting down key handler");
                 break;
             }
-            match event.event_type {
-                rdev::EventType::KeyPress(key) => {
-                    if key == key_to_check && !key_pressed {
-                        key_pressed = true;
-                        play_ptt_press_sound(); // Play low beep
-                        recording_start = std::time::SystemTime::now();
-
-                        if realtime_enabled {
-                            println!("PTT key pressed - starting realtime stream");
-                            let api_key = opt
-                                .api_key
-                                .clone()
-                                .or_else(|| std::env::var("OPENAI_API_KEY").ok());
-                            match api_key {
-                                Some(api_key) => {
-                                    match crate::realtime::RealtimeSession::start(
-                                        api_key,
-                                        opt.device.clone(),
-                                        "gpt-realtime-whisper".to_string(),
-                                        None,
-                                        opt.cap_first,
-                                        opt.realtime_delay.clone(),
-                                    ) {
-                                        Ok(session) => realtime_session = Some(session),
-                                        Err(err) => {
-                                            eprintln!(
-                                                "Error: Failed to start realtime session: {:?}",
-                                                err
-                                            );
-                                            play_failure_sound();
-                                        }
-                                    }
-                                }
-                                None => {
-                                    eprintln!("Error: No OpenAI API key for realtime mode");
-                                    play_failure_sound();
-                                }
-                            }
-                            continue;
-                        }
-
-                        println!("PTT key pressed - starting recording");
-                        match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
-                            Ok(_) => println!("Recording started successfully"),
-                            Err(err) => {
-                                eprintln!("Error: Failed to start recording: {:?}", err);
-                                continue;
-                            }
-                        }
-                    }
+            // Work out what this key event means before touching any state.
+            // `key_held` is the physical-key latch: rdev re-delivers KeyPress
+            // over and over while a key is held down (OS auto-repeat), so only
+            // the first press of each press-release cycle is a real press.
+            let action = match event.event_type {
+                rdev::EventType::KeyPress(key) if key == key_to_check => {
+                    PttAction::decide(true, toggle_mode, &mut key_held, recording)
                 }
-                rdev::EventType::KeyRelease(key) => {
-                    if key == key_to_check && key_pressed {
-                        key_pressed = false;
-                        play_ptt_release_sound(); // Play high beep
+                rdev::EventType::KeyRelease(key) if key == key_to_check => {
+                    PttAction::decide(false, toggle_mode, &mut key_held, recording)
+                }
+                _ => PttAction::Ignore,
+            };
 
-                        if realtime_enabled {
-                            println!("PTT key released - finishing realtime stream");
-                            let elapsed = recording_start.elapsed().unwrap_or_default();
-                            let session = match realtime_session.take() {
-                                Some(s) => s,
-                                None => continue,
-                            };
-                            let transcription = match session.stop() {
-                                Ok(text) => text,
-                                Err(err) => {
-                                    eprintln!("Error: Realtime transcription failed: {:?}", err);
-                                    play_failure_sound();
-                                    continue;
-                                }
-                            };
+            match action {
+                PttAction::Ignore => {}
+                PttAction::Start => {
+                    play_ptt_press_sound(); // Play low beep
+                    recording_start = std::time::SystemTime::now();
 
-                            let trimmed = transcription.trim();
-                            if trimmed.is_empty() {
-                                println!("No transcription");
-                                play_failure_sound();
-                                continue;
-                            }
-
-                            // Text was already typed live during the stream, so
-                            // any final ending-punctuation post-processing is
-                            // applied now via enigo. The mode is a single setting
-                            // ("none" | "period" | "smart"); they're mutually
-                            // exclusive so there's no "LLM undoing a period" case.
-                            let already_punctuated = trimmed
-                                .chars()
-                                .last()
-                                .map(|c| trans::is_terminal_punct(c))
-                                .unwrap_or(false);
-
-                            match opt.end_punctuation.as_str() {
-                                "period" => {
-                                    if !already_punctuated {
-                                        enigo.key_sequence(".");
-                                    }
-                                }
-                                "smart" => {
-                                    // If it already ends with a terminal mark,
-                                    // trust it and skip the LLM call entirely —
-                                    // detecting *presence* needs no intelligence.
-                                    if already_punctuated {
-                                        println!(
-                                            "Smart punctuation: already punctuated, skipping LLM"
-                                        );
-                                    } else {
-                                        match runtime.block_on(trans::decide_end_punctuation(
-                                            &client, trimmed,
-                                        )) {
-                                            Ok(mark) => {
-                                                if !mark.is_empty() {
-                                                    enigo.key_sequence(&mark);
-                                                }
-                                            }
-                                            Err(err) => {
-                                                eprintln!(
-                                                    "Smart punctuation failed: {:?}",
-                                                    err
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => {}
-                            }
-
-                            // --space: type a trailing space (after punctuation).
-                            if opt.space {
-                                enigo.key_sequence(" ");
-                            }
-
-                            let word_count = trimmed.split_whitespace().count();
-                            let duration_secs = elapsed.as_secs_f64();
-                            if duration_secs > 0.0 {
-                                let wpm = (word_count as f64) * 60.0 / duration_secs;
-                                wpm_history.push_back(wpm);
-                                wpm_sum += wpm;
-                                if wpm_history.len() > WPM_ROLLING_MAX {
-                                    if let Some(removed) = wpm_history.pop_front() {
-                                        wpm_sum -= removed;
-                                    }
-                                }
-                                let avg_wpm = if !wpm_history.is_empty() {
-                                    wpm_sum / (wpm_history.len() as f64)
-                                } else {
-                                    0.0
-                                };
-                                app_state.update_statistics(word_count, duration_secs, wpm);
-                                println!(
-                                    "WPM: {:.1} | Avg: {:.1} | Total: {} words (realtime)",
-                                    wpm, avg_wpm, word_count
-                                );
-                            }
-                            continue;
-                        }
-
-                        println!("PTT key released - stopping recording");
-
-                        let elapsed = match recording_start.elapsed() {
-                            Ok(elapsed) => elapsed,
-                            Err(err) => {
-                                eprintln!("Error: Failed to get elapsed recording time: {}", err);
-                                continue;
-                            }
-                        };
-
-                        match recorder.stop_recording() {
-                            Ok(_) => (),
-                            Err(err) => {
-                                eprintln!("Error: Failed to stop recording: {:?}", err);
-                                continue;
-                            }
-                        }
-
-                        // Quick tap after a failure retries the last audio
-                        let (audio_path, is_retry, recording_duration_secs) = if elapsed.as_secs_f32() > 0.2 {
-                            last_recording_duration_secs = elapsed.as_secs_f64();
-                            (Some(voice_tmp_path.clone()), false, elapsed.as_secs_f64())
-                        } else if last_transcription_failed && voice_retry_path.exists() {
-                            println!("Quick tap detected - retrying last failed transcription");
-                            (Some(voice_retry_path.clone()), true, last_recording_duration_secs)
-                        } else {
-                            println!("Recording too short");
-                            (None, false, 0.0)
-                        };
-
-                        if let Some(audio_path) = audio_path {
-                            let (tick_tx, tick_rx) = mpsc::channel();
-                            let tick_handle = thread::spawn(move || tick_loop(tick_rx));
-
-                            let transcription_result = if opt.use_local {
-                                let model = opt
-                                    .local_model
-                                    .as_ref()
-                                    .and_then(|m| Self::parse_model(m))
-                                    .expect("Valid model required");
-                                trans::transcribe_local(&audio_path, model)
-                            } else {
-                                runtime.block_on(trans::transcribe_racing(
-                                    &client,
-                                    &audio_path,
-                                    opt.parallel,
-                                    recording_duration_secs,
-                                ))
-                            };
-
-                            let mut transcription = match transcription_result {
-                                Ok(transcription) => transcription,
-                                Err(err) => {
-                                    let _ = tick_tx.send(());
-                                    let _ = tick_handle.join();
-                                    eprintln!("Error: Failed to transcribe audio: {:?}", err);
-                                    if !is_retry {
-                                        if let Err(e) = std::fs::copy(&voice_tmp_path, &voice_retry_path) {
-                                            eprintln!("Warning: Failed to save audio for retry: {:?}", e);
-                                        }
-                                    }
-                                    last_transcription_failed = true;
-                                    play_failure_sound();
-                                    continue;
-                                }
-                            };
-
-                            transcription = transcription.replace("...", "");
-
-                            if opt.punctuation && needs_punctuation_fix(&transcription) {
-                                println!("Transcription missing punctuation, fixing...");
-                                match runtime.block_on(trans::fix_punctuation_with_openai(
-                                    &client,
-                                    &transcription,
-                                )) {
-                                    Ok(fixed) => {
-                                        println!("Punctuation added.");
-                                        transcription = fixed;
+                    if realtime_enabled {
+                        println!("PTT start - starting realtime stream");
+                        let api_key = opt
+                            .api_key
+                            .clone()
+                            .or_else(|| std::env::var("OPENAI_API_KEY").ok());
+                        match api_key {
+                            Some(api_key) => {
+                                match crate::realtime::RealtimeSession::start(
+                                    api_key,
+                                    opt.device.clone(),
+                                    "gpt-realtime-whisper".to_string(),
+                                    None,
+                                    opt.cap_first,
+                                    opt.realtime_delay.clone(),
+                                ) {
+                                    Ok(session) => {
+                                        realtime_session = Some(session);
+                                        recording = true;
                                     }
                                     Err(err) => {
-                                        println!(
-                                            "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
+                                        eprintln!(
+                                            "Error: Failed to start realtime session: {:?}",
                                             err
                                         );
+                                        play_failure_sound();
                                     }
                                 }
                             }
-
-                            // Ending punctuation (single mutually-exclusive mode:
-                            // "none" | "period" | "smart"). Smart mode needs the
-                            // OpenAI API, so it's skipped in local mode, and it's
-                            // skipped when the text already ends with a terminal
-                            // mark (no LLM needed just to detect presence). The
-                            // network call runs while the tick still plays.
-                            let already_punctuated = transcription
-                                .trim_end()
-                                .chars()
-                                .last()
-                                .map(|c| trans::is_terminal_punct(c))
-                                .unwrap_or(false);
-
-                            if opt.end_punctuation == "smart"
-                                && !opt.use_local
-                                && !already_punctuated
-                            {
-                                match runtime.block_on(trans::decide_end_punctuation(
-                                    &client,
-                                    transcription.trim(),
-                                )) {
-                                    Ok(mark) => {
-                                        let stripped = transcription
-                                            .trim_end()
-                                            .trim_end_matches(|c| trans::is_terminal_punct(c))
-                                            .trim_end()
-                                            .to_string();
-                                        transcription = if mark.is_empty() {
-                                            stripped
-                                        } else {
-                                            format!("{}{}", stripped, mark)
-                                        };
-                                    }
-                                    Err(err) => {
-                                        println!("Smart punctuation failed: {:?}", err);
-                                    }
-                                }
-                            }
-
-                            let _ = tick_tx.send(());
-                            let _ = tick_handle.join();
-
-                            if opt.end_punctuation == "period" && !already_punctuated {
-                                let trimmed = transcription.trim_end();
-                                transcription = format!("{}.", trimmed);
-                            }
-
-                            if opt.cap_first {
-                                capitalize_first_letter(&mut transcription);
-                            }
-
-                            if opt.space {
-                                if let Some(last_char) = transcription.chars().last() {
-                                    if last_char != ' ' {
-                                        transcription.push(' ');
-                                    }
-                                }
-                            }
-
-                            transcription = transcription.replace("...", "");
-
-                            if transcription.is_empty() {
-                                println!("No transcription");
+                            None => {
+                                eprintln!("Error: No OpenAI API key for realtime mode");
                                 play_failure_sound();
-                                continue;
                             }
+                        }
+                        continue;
+                    }
 
-                            let word_count = transcription.split_whitespace().count();
-
-                            if opt.type_chars {
-                                enigo.key_sequence(&transcription);
-                            } else {
-                                let clip_tmp_result = clipboard.get_contents();
-
-                                match clipboard.set_contents(transcription.clone()) {
-                                    Ok(_) => {
-                                        enigo.key_sequence_parse("{+CTRL}");
-                                        sleep(Duration::from_millis(100));
-                                        enigo.key_sequence_parse("v");
-                                        sleep(Duration::from_millis(100));
-                                        enigo.key_sequence_parse("{-CTRL}");
-                                        sleep(Duration::from_millis(100));
-
-                                        if let Ok(clip_tmp) = clip_tmp_result {
-                                            let _ = clipboard.set_contents(clip_tmp);
-                                        }
-                                    }
-                                    Err(err) => {
-                                        eprintln!("Error: Failed to set clipboard: {:?}", err);
-                                        continue;
-                                    }
-                                }
-                            }
-
-                            last_transcription_failed = false;
-
-                            if !is_retry && elapsed.as_secs_f64() > 0.0 {
-                                let duration_secs = elapsed.as_secs_f64();
-                                let wpm = (word_count as f64) * 60.0 / duration_secs;
-                                wpm_history.push_back(wpm);
-                                wpm_sum += wpm;
-                                if wpm_history.len() > WPM_ROLLING_MAX {
-                                    if let Some(removed) = wpm_history.pop_front() {
-                                        wpm_sum -= removed;
-                                    }
-                                }
-                                let avg_wpm = if !wpm_history.is_empty() {
-                                    wpm_sum / (wpm_history.len() as f64)
-                                } else {
-                                    0.0
-                                };
-
-                                app_state.update_statistics(word_count, duration_secs, wpm);
-
-                                println!(
-                                    "WPM: {:.1} | Avg: {:.1} | Total: {} words",
-                                    wpm, avg_wpm, word_count
-                                );
-                            }
+                    println!("PTT start - starting recording");
+                    match recorder.start_recording(&voice_tmp_path, Some(&opt.device)) {
+                        Ok(_) => {
+                            println!("Recording started successfully");
+                            recording = true;
+                        }
+                        Err(err) => {
+                            eprintln!("Error: Failed to start recording: {:?}", err);
+                            continue;
                         }
                     }
                 }
-                _ => (),
+                PttAction::Stop => {
+                    recording = false;
+                    play_ptt_release_sound(); // Play high beep
+
+                    if realtime_enabled {
+                        println!("PTT stop - finishing realtime stream");
+                        let elapsed = recording_start.elapsed().unwrap_or_default();
+                        let session = match realtime_session.take() {
+                            Some(s) => s,
+                            None => continue,
+                        };
+                        let transcription = match session.stop() {
+                            Ok(text) => text,
+                            Err(err) => {
+                                eprintln!("Error: Realtime transcription failed: {:?}", err);
+                                play_failure_sound();
+                                continue;
+                            }
+                        };
+
+                        let trimmed = transcription.trim();
+                        if trimmed.is_empty() {
+                            println!("No transcription");
+                            play_failure_sound();
+                            continue;
+                        }
+
+                        // Text was already typed live during the stream, so
+                        // any final ending-punctuation post-processing is
+                        // applied now via enigo. The mode is a single setting
+                        // ("none" | "period" | "smart"); they're mutually
+                        // exclusive so there's no "LLM undoing a period" case.
+                        let already_punctuated = trimmed
+                            .chars()
+                            .last()
+                            .map(|c| trans::is_terminal_punct(c))
+                            .unwrap_or(false);
+
+                        match opt.end_punctuation.as_str() {
+                            "period" => {
+                                if !already_punctuated {
+                                    enigo.key_sequence(".");
+                                }
+                            }
+                            "smart" => {
+                                // If it already ends with a terminal mark,
+                                // trust it and skip the LLM call entirely —
+                                // detecting *presence* needs no intelligence.
+                                if already_punctuated {
+                                    println!(
+                                        "Smart punctuation: already punctuated, skipping LLM"
+                                    );
+                                } else {
+                                    match runtime.block_on(trans::decide_end_punctuation(
+                                        &client, trimmed,
+                                    )) {
+                                        Ok(mark) => {
+                                            if !mark.is_empty() {
+                                                enigo.key_sequence(&mark);
+                                            }
+                                        }
+                                        Err(err) => {
+                                            eprintln!(
+                                                "Smart punctuation failed: {:?}",
+                                                err
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+
+                        // --space: type a trailing space (after punctuation).
+                        if opt.space {
+                            enigo.key_sequence(" ");
+                        }
+
+                        let word_count = trimmed.split_whitespace().count();
+                        let duration_secs = elapsed.as_secs_f64();
+                        if duration_secs > 0.0 {
+                            let wpm = (word_count as f64) * 60.0 / duration_secs;
+                            wpm_history.push_back(wpm);
+                            wpm_sum += wpm;
+                            if wpm_history.len() > WPM_ROLLING_MAX {
+                                if let Some(removed) = wpm_history.pop_front() {
+                                    wpm_sum -= removed;
+                                }
+                            }
+                            let avg_wpm = if !wpm_history.is_empty() {
+                                wpm_sum / (wpm_history.len() as f64)
+                            } else {
+                                0.0
+                            };
+                            app_state.update_statistics(word_count, duration_secs, wpm);
+                            println!(
+                                "WPM: {:.1} | Avg: {:.1} | Total: {} words (realtime)",
+                                wpm, avg_wpm, word_count
+                            );
+                        }
+                        continue;
+                    }
+
+                    println!("PTT stop - stopping recording");
+
+                    let elapsed = match recording_start.elapsed() {
+                        Ok(elapsed) => elapsed,
+                        Err(err) => {
+                            eprintln!("Error: Failed to get elapsed recording time: {}", err);
+                            continue;
+                        }
+                    };
+
+                    match recorder.stop_recording() {
+                        Ok(_) => (),
+                        Err(err) => {
+                            eprintln!("Error: Failed to stop recording: {:?}", err);
+                            continue;
+                        }
+                    }
+
+                    // Quick tap after a failure retries the last audio
+                    let (audio_path, is_retry, recording_duration_secs) = if elapsed.as_secs_f32() > 0.2 {
+                        last_recording_duration_secs = elapsed.as_secs_f64();
+                        (Some(voice_tmp_path.clone()), false, elapsed.as_secs_f64())
+                    } else if last_transcription_failed && voice_retry_path.exists() {
+                        println!("Quick tap detected - retrying last failed transcription");
+                        (Some(voice_retry_path.clone()), true, last_recording_duration_secs)
+                    } else {
+                        println!("Recording too short");
+                        (None, false, 0.0)
+                    };
+
+                    if let Some(audio_path) = audio_path {
+                        let (tick_tx, tick_rx) = mpsc::channel();
+                        let tick_handle = thread::spawn(move || tick_loop(tick_rx));
+
+                        let transcription_result = if opt.use_local {
+                            let model = opt
+                                .local_model
+                                .as_ref()
+                                .and_then(|m| Self::parse_model(m))
+                                .expect("Valid model required");
+                            trans::transcribe_local(&audio_path, model)
+                        } else {
+                            runtime.block_on(trans::transcribe_racing(
+                                &client,
+                                &audio_path,
+                                opt.parallel,
+                                recording_duration_secs,
+                            ))
+                        };
+
+                        let mut transcription = match transcription_result {
+                            Ok(transcription) => transcription,
+                            Err(err) => {
+                                let _ = tick_tx.send(());
+                                let _ = tick_handle.join();
+                                eprintln!("Error: Failed to transcribe audio: {:?}", err);
+                                if !is_retry {
+                                    if let Err(e) = std::fs::copy(&voice_tmp_path, &voice_retry_path) {
+                                        eprintln!("Warning: Failed to save audio for retry: {:?}", e);
+                                    }
+                                }
+                                last_transcription_failed = true;
+                                play_failure_sound();
+                                continue;
+                            }
+                        };
+
+                        transcription = transcription.replace("...", "");
+
+                        if opt.punctuation && needs_punctuation_fix(&transcription) {
+                            println!("Transcription missing punctuation, fixing...");
+                            match runtime.block_on(trans::fix_punctuation_with_openai(
+                                &client,
+                                &transcription,
+                            )) {
+                                Ok(fixed) => {
+                                    println!("Punctuation added.");
+                                    transcription = fixed;
+                                }
+                                Err(err) => {
+                                    println!(
+                                        "Warning: Failed to fix punctuation: {:?}. Using original transcription.",
+                                        err
+                                    );
+                                }
+                            }
+                        }
+
+                        // Ending punctuation (single mutually-exclusive mode:
+                        // "none" | "period" | "smart"). Smart mode needs the
+                        // OpenAI API, so it's skipped in local mode, and it's
+                        // skipped when the text already ends with a terminal
+                        // mark (no LLM needed just to detect presence). The
+                        // network call runs while the tick still plays.
+                        let already_punctuated = transcription
+                            .trim_end()
+                            .chars()
+                            .last()
+                            .map(|c| trans::is_terminal_punct(c))
+                            .unwrap_or(false);
+
+                        if opt.end_punctuation == "smart"
+                            && !opt.use_local
+                            && !already_punctuated
+                        {
+                            match runtime.block_on(trans::decide_end_punctuation(
+                                &client,
+                                transcription.trim(),
+                            )) {
+                                Ok(mark) => {
+                                    let stripped = transcription
+                                        .trim_end()
+                                        .trim_end_matches(|c| trans::is_terminal_punct(c))
+                                        .trim_end()
+                                        .to_string();
+                                    transcription = if mark.is_empty() {
+                                        stripped
+                                    } else {
+                                        format!("{}{}", stripped, mark)
+                                    };
+                                }
+                                Err(err) => {
+                                    println!("Smart punctuation failed: {:?}", err);
+                                }
+                            }
+                        }
+
+                        let _ = tick_tx.send(());
+                        let _ = tick_handle.join();
+
+                        if opt.end_punctuation == "period" && !already_punctuated {
+                            let trimmed = transcription.trim_end();
+                            transcription = format!("{}.", trimmed);
+                        }
+
+                        if opt.cap_first {
+                            capitalize_first_letter(&mut transcription);
+                        }
+
+                        if opt.space {
+                            if let Some(last_char) = transcription.chars().last() {
+                                if last_char != ' ' {
+                                    transcription.push(' ');
+                                }
+                            }
+                        }
+
+                        transcription = transcription.replace("...", "");
+
+                        if transcription.is_empty() {
+                            println!("No transcription");
+                            play_failure_sound();
+                            continue;
+                        }
+
+                        let word_count = transcription.split_whitespace().count();
+
+                        if opt.type_chars {
+                            enigo.key_sequence(&transcription);
+                        } else {
+                            let clip_tmp_result = clipboard.get_contents();
+
+                            match clipboard.set_contents(transcription.clone()) {
+                                Ok(_) => {
+                                    enigo.key_sequence_parse("{+CTRL}");
+                                    sleep(Duration::from_millis(100));
+                                    enigo.key_sequence_parse("v");
+                                    sleep(Duration::from_millis(100));
+                                    enigo.key_sequence_parse("{-CTRL}");
+                                    sleep(Duration::from_millis(100));
+
+                                    if let Ok(clip_tmp) = clip_tmp_result {
+                                        let _ = clipboard.set_contents(clip_tmp);
+                                    }
+                                }
+                                Err(err) => {
+                                    eprintln!("Error: Failed to set clipboard: {:?}", err);
+                                    continue;
+                                }
+                            }
+                        }
+
+                        last_transcription_failed = false;
+
+                        if !is_retry && elapsed.as_secs_f64() > 0.0 {
+                            let duration_secs = elapsed.as_secs_f64();
+                            let wpm = (word_count as f64) * 60.0 / duration_secs;
+                            wpm_history.push_back(wpm);
+                            wpm_sum += wpm;
+                            if wpm_history.len() > WPM_ROLLING_MAX {
+                                if let Some(removed) = wpm_history.pop_front() {
+                                    wpm_sum -= removed;
+                                }
+                            }
+                            let avg_wpm = if !wpm_history.is_empty() {
+                                wpm_sum / (wpm_history.len() as f64)
+                            } else {
+                                0.0
+                            };
+
+                            app_state.update_statistics(word_count, duration_secs, wpm);
+
+                            println!(
+                                "WPM: {:.1} | Avg: {:.1} | Total: {} words",
+                                wpm, avg_wpm, word_count
+                            );
+                        }
+                    }
+                }
             }
         }
     }
@@ -609,5 +687,128 @@ impl TranscriptionEngine {
             "large-v3" => Some(ModelType::LargeV3),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod ptt_tests {
+    use super::PttAction;
+
+    /// Drives the same state machine the key handler runs, so a test sequence
+    /// exercises exactly the live logic.
+    struct Ptt {
+        toggle_mode: bool,
+        key_held: bool,
+        recording: bool,
+    }
+
+    impl Ptt {
+        fn new(toggle_mode: bool) -> Self {
+            Self {
+                toggle_mode,
+                key_held: false,
+                recording: false,
+            }
+        }
+
+        fn feed(&mut self, pressed: bool) -> PttAction {
+            let action =
+                PttAction::decide(pressed, self.toggle_mode, &mut self.key_held, self.recording);
+            match action {
+                PttAction::Start => self.recording = true,
+                PttAction::Stop => self.recording = false,
+                PttAction::Ignore => {}
+            }
+            action
+        }
+
+        fn press(&mut self) -> PttAction {
+            self.feed(true)
+        }
+
+        fn release(&mut self) -> PttAction {
+            self.feed(false)
+        }
+    }
+
+    #[test]
+    fn hold_mode_starts_on_press_and_stops_on_release() {
+        let mut ptt = Ptt::new(false);
+        assert_eq!(ptt.press(), PttAction::Start);
+        assert_eq!(ptt.release(), PttAction::Stop);
+        assert!(!ptt.recording);
+    }
+
+    #[test]
+    fn hold_mode_ignores_auto_repeat_while_held() {
+        let mut ptt = Ptt::new(false);
+        assert_eq!(ptt.press(), PttAction::Start);
+        for _ in 0..100 {
+            assert_eq!(ptt.press(), PttAction::Ignore);
+        }
+        assert!(ptt.recording, "auto-repeat must not interrupt recording");
+        assert_eq!(ptt.release(), PttAction::Stop);
+    }
+
+    #[test]
+    fn hold_mode_ignores_a_release_it_never_saw_pressed() {
+        // e.g. the engine started while the key was already down
+        let mut ptt = Ptt::new(false);
+        assert_eq!(ptt.release(), PttAction::Ignore);
+    }
+
+    #[test]
+    fn toggle_mode_starts_on_first_press_and_stops_on_second() {
+        let mut ptt = Ptt::new(true);
+        assert_eq!(ptt.press(), PttAction::Start);
+        assert_eq!(ptt.release(), PttAction::Ignore);
+        assert!(ptt.recording, "recording continues after the key comes up");
+        assert_eq!(ptt.press(), PttAction::Stop);
+        assert_eq!(ptt.release(), PttAction::Ignore);
+        assert!(!ptt.recording);
+    }
+
+    /// The regression this mode could most easily have shipped with: resting on
+    /// the key produces a storm of KeyPress events, and a naive toggle would
+    /// flip recording on and off with every one of them.
+    #[test]
+    fn toggle_mode_holding_the_key_down_causes_exactly_one_state_change() {
+        let mut ptt = Ptt::new(true);
+        assert_eq!(ptt.press(), PttAction::Start);
+        let mut changes = 0;
+        // ~3 seconds of OS auto-repeat at 30 repeats/sec
+        for _ in 0..90 {
+            if ptt.press() != PttAction::Ignore {
+                changes += 1;
+            }
+        }
+        assert_eq!(changes, 0, "auto-repeat must not toggle recording");
+        assert!(ptt.recording, "still recording after 3 seconds held down");
+        assert_eq!(ptt.release(), PttAction::Ignore);
+        assert!(ptt.recording, "releasing must not stop a toggle recording");
+    }
+
+    #[test]
+    fn toggle_mode_survives_many_cycles() {
+        let mut ptt = Ptt::new(true);
+        for _ in 0..10 {
+            assert_eq!(ptt.press(), PttAction::Start);
+            ptt.release();
+            assert!(ptt.recording);
+            assert_eq!(ptt.press(), PttAction::Stop);
+            ptt.release();
+            assert!(!ptt.recording);
+        }
+    }
+
+    /// A failed start leaves `recording` false, so the next press must be a
+    /// fresh Start rather than a Stop of something that never began.
+    #[test]
+    fn toggle_mode_recovers_when_a_start_fails() {
+        let mut ptt = Ptt::new(true);
+        assert_eq!(ptt.press(), PttAction::Start);
+        ptt.recording = false; // the recorder failed to open the device
+        ptt.release();
+        assert_eq!(ptt.press(), PttAction::Start);
     }
 }
