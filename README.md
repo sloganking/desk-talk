@@ -9,6 +9,10 @@ A modern GUI application that records what you say when you press a button down,
 
 https://github.com/sloganking/desk-talk/assets/16965931/e5da605b-3a9d-4394-b4ec-a3de65605a65
 
+## Clipboard paste behavior
+
+Clipboard mode verifies the new transcription before sending Ctrl+V and retries brief clipboard contention. If verification fails, it cancels the paste and plays the failure sound. The transcription remains on the clipboard after a successful paste: restoring the old clipboard on a timer can cause slow applications to paste stale text. Character typing mode is unchanged.
+
 ## Features
 
 ✨ **Push-to-Talk Transcription** - Hold a key, speak, release to paste  

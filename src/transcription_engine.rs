@@ -618,25 +618,25 @@ impl TranscriptionEngine {
                         if opt.type_chars {
                             enigo.key_sequence(&transcription);
                         } else {
-                            let clip_tmp_result = clipboard.get_contents();
-
-                            match clipboard.set_contents(transcription.clone()) {
-                                Ok(_) => {
+                            let result = crate::clipboard_paste::paste_verified(
+                                &transcription,
+                                |text| {
+                                    clipboard.set_contents(text.to_owned()).map_err(|e| e.to_string())?;
+                                    clipboard.get_contents().map_err(|e| e.to_string())
+                                },
+                                || {
                                     enigo.key_sequence_parse("{+CTRL}");
                                     sleep(Duration::from_millis(100));
                                     enigo.key_sequence_parse("v");
                                     sleep(Duration::from_millis(100));
                                     enigo.key_sequence_parse("{-CTRL}");
-                                    sleep(Duration::from_millis(100));
-
-                                    if let Ok(clip_tmp) = clip_tmp_result {
-                                        let _ = clipboard.set_contents(clip_tmp);
-                                    }
-                                }
-                                Err(err) => {
-                                    eprintln!("Error: Failed to set clipboard: {:?}", err);
-                                    continue;
-                                }
+                                },
+                                || sleep(Duration::from_millis(20)),
+                            );
+                            if let Err(err) = result {
+                                eprintln!("Clipboard paste cancelled: {}", err);
+                                play_failure_sound();
+                                continue;
                             }
                         }
 
