@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::in_flight::{self, Ticker};
 use crate::config::AppConfig;
 use crate::record::rec;
 use crate::transcribe::trans;
@@ -11,41 +12,14 @@ use rdev::Event;
 use rodio::{source::SineWave, Decoder, Source};
 use std::collections::VecDeque;
 use std::io::{BufReader, Cursor};
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::{self, sleep};
 use std::time::Duration;
 use tempfile::tempdir;
 
-static TICK_BYTES: &[u8] = include_bytes!("../assets/tick.mp3");
 static FAILED_BYTES: &[u8] = include_bytes!("../assets/failed.mp3");
 static BEEP_LOW_BYTES: &[u8] = include_bytes!("../assets/beep_low.mp3");
 static BEEP_HIGH_BYTES: &[u8] = include_bytes!("../assets/beep.mp3");
-
-fn tick_loop(stop_rx: mpsc::Receiver<()>) {
-    let tick_sink = DefaultDeviceSink::new();
-    loop {
-        if stop_rx.try_recv().is_ok() {
-            tick_sink.stop();
-            break;
-        }
-        if tick_sink.empty() {
-            let cursor = Cursor::new(TICK_BYTES);
-            if let Ok(decoder) = Decoder::new(BufReader::new(cursor)) {
-                tick_sink.stop();
-                tick_sink.append(decoder);
-            } else {
-                tick_sink.stop();
-                tick_sink.append(
-                    SineWave::new(880.0)
-                        .take_duration(Duration::from_millis(50))
-                        .amplify(0.20),
-                );
-            }
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-}
 
 fn play_failure_sound() {
     let sink = DefaultDeviceSink::new();
@@ -489,38 +463,57 @@ impl TranscriptionEngine {
                     };
 
                     if let Some(audio_path) = audio_path {
-                        let (tick_tx, tick_rx) = mpsc::channel();
-                        let tick_handle = thread::spawn(move || tick_loop(tick_rx));
+                        // Stops ticking when dropped, so every path out of
+                        // this block (continue, early return, panic) ends it.
+                        let mut ticker = Ticker::start();
 
-                        let transcription_result = if opt.use_local {
-                            let model = opt
-                                .local_model
-                                .as_ref()
-                                .and_then(|m| Self::parse_model(m))
-                                .expect("Valid model required");
-                            trans::transcribe_local(&audio_path, model)
-                        } else {
-                            runtime.block_on(trans::transcribe_racing(
-                                &client,
-                                &audio_path,
-                                opt.parallel,
-                                recording_duration_secs,
-                            ))
+                        // The transcription runs on its own thread under a
+                        // deadline, so a hung API call or a panic (e.g. ffmpeg
+                        // missing) fails the dictation instead of hanging it.
+                        let work = {
+                            let use_local = opt.use_local;
+                            let local_model = opt.local_model.clone();
+                            let client = client.clone();
+                            let audio_path = audio_path.clone();
+                            let parallel = opt.parallel;
+                            let rt = runtime.handle().clone();
+                            move || -> Result<String, String> {
+                                let result = if use_local {
+                                    let model = local_model
+                                        .as_deref()
+                                        .and_then(Self::parse_model)
+                                        .ok_or("Valid local model required")?;
+                                    trans::transcribe_local(&audio_path, model)
+                                } else {
+                                    rt.block_on(trans::transcribe_racing(
+                                        &client,
+                                        &audio_path,
+                                        parallel,
+                                        recording_duration_secs,
+                                    ))
+                                };
+                                result.map_err(|e| format!("{:?}", e))
+                            }
                         };
 
-                        let mut transcription = match transcription_result {
-                            Ok(transcription) => transcription,
-                            Err(err) => {
-                                let _ = tick_tx.send(());
-                                let _ = tick_handle.join();
-                                eprintln!("Error: Failed to transcribe audio: {:?}", err);
+                        let transcription = in_flight::await_transcription(
+                            &mut ticker,
+                            in_flight::transcription_deadline(recording_duration_secs),
+                            work,
+                            |err| {
+                                eprintln!("Error: Failed to transcribe audio: {}", err);
                                 if !is_retry {
                                     if let Err(e) = std::fs::copy(&voice_tmp_path, &voice_retry_path) {
                                         eprintln!("Warning: Failed to save audio for retry: {:?}", e);
                                     }
                                 }
-                                last_transcription_failed = true;
                                 play_failure_sound();
+                            },
+                        );
+                        let mut transcription = match transcription {
+                            Some(transcription) => transcription,
+                            None => {
+                                last_transcription_failed = true;
                                 continue;
                             }
                         };
@@ -585,8 +578,7 @@ impl TranscriptionEngine {
                             }
                         }
 
-                        let _ = tick_tx.send(());
-                        let _ = tick_handle.join();
+                        ticker.stop();
 
                         if opt.end_punctuation == "period" && !already_punctuated {
                             let trimmed = transcription.trim_end();

@@ -65,6 +65,12 @@ const APPEND_BATCH_SAMPLES: usize = (TARGET_SAMPLE_RATE as usize * 120) / 1000;
 /// the socket waiting for trailing transcript deltas before giving up.
 const DRAIN_IDLE_TIMEOUT: Duration = Duration::from_millis(1500);
 
+/// Upper bound on waiting for a session to finish after key release. A normal
+/// finish is the commit plus a drain that ends 1.5s after the last delta, so
+/// this only fires when the session is stuck (e.g. a connect that never
+/// completes, which has no timeout of its own and never sees the stop signal).
+const REALTIME_STOP_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// A live realtime transcription session. Created on push-to-talk key down and
 /// finished on key up via [`RealtimeSession::stop`].
 pub struct RealtimeSession {
@@ -122,10 +128,21 @@ impl RealtimeSession {
     /// transcribed (which mirrors what was typed live).
     pub fn stop(mut self) -> Result<String> {
         let _ = self.stop_tx.send(());
-        let result = self
-            .result_rx
-            .recv()
-            .unwrap_or_else(|_| Err(anyhow!("Realtime session ended unexpectedly")));
+        let result = match self.result_rx.recv_timeout(REALTIME_STOP_TIMEOUT) {
+            Ok(result) => result,
+            Err(flume::RecvTimeoutError::Disconnected) => {
+                Err(anyhow!("Realtime session ended unexpectedly"))
+            }
+            Err(flume::RecvTimeoutError::Timeout) => {
+                // Leave the stuck session thread detached rather than join it,
+                // which would hang the key handler just the same.
+                self.handle.take();
+                return Err(anyhow!(
+                    "Realtime session did not finish within {}s of key release",
+                    REALTIME_STOP_TIMEOUT.as_secs()
+                ));
+            }
+        };
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }

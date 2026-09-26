@@ -5,6 +5,7 @@ mod app_state;
 mod config;
 mod clipboard_paste;
 mod easy_rdev_key;
+mod in_flight;
 mod realtime;
 mod record;
 mod tauri_commands;
